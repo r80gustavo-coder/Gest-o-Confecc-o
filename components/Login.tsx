@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { getUsers, setupDatabase, checkDatabaseHealth } from '../services/storageService';
-import { Lock, User as UserIcon, Loader2, Database, AlertCircle, PlayCircle, Settings, CheckCircle2, XCircle, Eye } from 'lucide-react';
+import { getUsers, setupDatabase, checkDatabaseHealth, REQUIRED_SQL_SCHEMA } from '../services/storageService';
+import { Lock, User as UserIcon, Loader2, Database, AlertCircle, PlayCircle, Settings, CheckCircle2, XCircle, Eye, Copy, Terminal } from 'lucide-react';
 
 interface Props {
   onLogin: (user: User) => void;
@@ -21,6 +21,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [debugUsers, setDebugUsers] = useState<User[] | null>(null);
 
+  // SQL Copy
+  const [sqlCopied, setSqlCopied] = useState(false);
+
   // Verifica o banco assim que carrega a página
   useEffect(() => {
     checkSystem();
@@ -34,9 +37,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           
           if (health.status === 'missing_tables') {
               setNeedsSetup(true);
+              setError("Tabelas não encontradas no Supabase.");
           } else if (health.status === 'error') {
               setError(`Erro de conexão: ${health.message}`);
-              // Se der erro, abre o diagnóstico automaticamente para ajudar o usuário
               setShowDiagnostics(true);
           }
       } catch (e) {
@@ -65,18 +68,17 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
     try {
       const users = await getUsers();
+      // Comparação simples (em produção idealmente seria case-insensitive ou hash)
       const validUser = users.find(u => u.username === username && u.password === password);
       
       if (validUser) {
         onLogin(validUser);
       } else {
         setError('Usuário ou senha incorretos.');
-        // Opcional: Buscar usuários para ajudar no debug se falhar
-        // fetchDebugUsers(); 
       }
     } catch (err: any) {
       console.error(err);
-      if (err.message === "TABLE_MISSING" || JSON.stringify(err).includes("no such table")) {
+      if (err.message === "TABLE_MISSING" || JSON.stringify(err).includes("relation") || JSON.stringify(err).includes("does not exist")) {
           setError('As tabelas do banco ainda não foram criadas.');
           setNeedsSetup(true);
       } else {
@@ -90,7 +92,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
   const handleSetupDatabase = async () => {
     setLoading(true);
-    setSetupMsg('Criando tabelas e usuário admin...');
+    setSetupMsg('Verificando tabelas e usuário Admin...');
     setError('');
     
     try {
@@ -98,13 +100,19 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       if (result.success) {
         setSetupMsg(result.message);
         setNeedsSetup(false);
-        // Pre-fill login
-        setUsername('admin');
-        setPassword('123456');
+        // Pre-fill login com os dados do Gustavo
+        setUsername('gustavo_benvindo80@hotmail.com');
+        setPassword('Gustavor80');
         // Re-check health
         checkSystem();
       } else {
-        setError('Erro: ' + result.message);
+        // Se falhar porque as tabelas não existem, mostramos o SQL
+        if (result.message?.includes("SQL")) {
+            setNeedsSetup(true);
+            setError("Tabelas inexistentes. Use o comando SQL abaixo no seu painel Supabase.");
+        } else {
+            setError('Erro: ' + result.message);
+        }
       }
     } catch (e: any) {
       setError('Falha crítica ao configurar banco: ' + e.message);
@@ -113,12 +121,18 @@ const Login: React.FC<Props> = ({ onLogin }) => {
     }
   };
 
+  const copySQL = () => {
+      navigator.clipboard.writeText(REQUIRED_SQL_SCHEMA);
+      setSqlCopied(true);
+      setTimeout(() => setSqlCopied(false), 2000);
+  };
+
   if (checkingHealth) {
       return (
           <div className="min-h-screen bg-gray-100 flex items-center justify-center">
               <div className="text-center">
                   <Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-500">Conectando ao banco de dados...</p>
+                  <p className="text-gray-500">Conectando ao Supabase...</p>
               </div>
           </div>
       );
@@ -126,8 +140,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
   // Verificar se as variaveis de ambiente estão carregadas (sem expor o valor real)
   const envCheck = {
-      url: !!process.env.VITE_TURSO_DATABASE_URL,
-      token: !!process.env.VITE_TURSO_AUTH_TOKEN
+      url: !!process.env.VITE_SUPABASE_URL,
+      key: !!process.env.VITE_SUPABASE_ANON_KEY || !!process.env.VITE_SUPABASE_KEY
   };
 
   return (
@@ -143,7 +157,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-blue-900">Confecção Pro</h1>
-          <p className="text-gray-500 mt-2">Sistema de Gestão de Pedidos</p>
+          <p className="text-gray-500 mt-2">Sistema de Gestão de Pedidos (Supabase)</p>
         </div>
 
         {/* Painel de Diagnóstico */}
@@ -155,8 +169,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 </h3>
                 
                 <div className="flex justify-between items-center mb-1">
-                    <span>Arquivo .env carregado?</span>
-                    {envCheck.url ? <span className="text-green-600 flex items-center"><CheckCircle2 className="w-3 h-3 mr-1"/> Sim</span> : <span className="text-red-600 flex items-center"><XCircle className="w-3 h-3 mr-1"/> Não</span>}
+                    <span>Arquivo .env (Supabase)?</span>
+                    {envCheck.url && envCheck.key ? <span className="text-green-600 flex items-center"><CheckCircle2 className="w-3 h-3 mr-1"/> Sim</span> : <span className="text-red-600 flex items-center"><XCircle className="w-3 h-3 mr-1"/> Não</span>}
                 </div>
                 <div className="flex justify-between items-center mb-1">
                     <span>Status Conexão:</span>
@@ -167,11 +181,6 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 {healthStatus?.message && (
                     <div className="mt-2 p-2 bg-red-100 text-red-800 rounded text-xs break-words font-mono">
                         {healthStatus.message}
-                        {(healthStatus.message.includes("Failed to fetch") || healthStatus.message.includes("NetworkError")) && (
-                            <div className="mt-2 font-sans font-bold text-red-900">
-                                Dica: O sistema tentou corrigir a URL automaticamente para HTTPS. Se o erro persistir, verifique se a URL no .env termina exatamente em ".turso.io" sem caracteres estranhos depois.
-                            </div>
-                        )}
                     </div>
                 )}
 
@@ -180,34 +189,15 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                         onClick={fetchDebugUsers}
                         className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-2 rounded text-xs font-bold flex items-center justify-center"
                     >
-                        <Eye className="w-3 h-3 mr-1" /> Ver Usuários (Debug)
+                        <Eye className="w-3 h-3 mr-1" /> Debug Users
                     </button>
                     <button 
                         onClick={() => setNeedsSetup(true)}
                         className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-bold"
                     >
-                        Forçar Instalação
+                        Ver Configuração
                     </button>
                 </div>
-
-                {debugUsers && (
-                    <div className="mt-3 border-t pt-2">
-                        <p className="text-xs font-bold mb-1">Usuários encontrados no banco:</p>
-                        {debugUsers.length === 0 ? (
-                            <p className="text-xs text-red-500">Nenhum usuário encontrado.</p>
-                        ) : (
-                            <ul className="text-xs text-gray-600 max-h-32 overflow-y-auto space-y-1">
-                                {debugUsers.map((u, i) => (
-                                    <li key={i} className="bg-white p-1 border rounded">
-                                        <strong>User:</strong> {u.username} <br/>
-                                        <strong>Senha:</strong> {u.password} <br/>
-                                        <strong>Role:</strong> {u.role}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                )}
             </div>
         )}
 
@@ -215,16 +205,38 @@ const Login: React.FC<Props> = ({ onLogin }) => {
            <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 text-center animate-fade-in">
                <Database className="w-12 h-12 text-orange-500 mx-auto mb-3" />
                <h3 className="text-lg font-bold text-orange-800 mb-2">Configuração Inicial</h3>
-               <p className="text-sm text-orange-700 mb-6">
-                   O sistema precisa criar as tabelas no seu banco de dados Turso para funcionar.
-               </p>
+               
+               {/* Instruções de SQL se for Supabase */}
+               <div className="text-left bg-white p-3 rounded border border-orange-200 mb-4">
+                   <p className="text-xs text-orange-800 mb-2 font-bold flex items-center">
+                       <Terminal className="w-3 h-3 mr-1" /> Ação Necessária no Supabase:
+                   </p>
+                   <p className="text-xs text-gray-600 mb-2">
+                       Copie o código abaixo e execute no <strong>SQL Editor</strong> do seu painel Supabase para criar as tabelas.
+                   </p>
+                   <div className="relative">
+                       <textarea 
+                           readOnly 
+                           className="w-full h-24 text-[10px] p-2 bg-gray-900 text-green-400 font-mono rounded resize-none"
+                           value={REQUIRED_SQL_SCHEMA}
+                       />
+                       <button 
+                           onClick={copySQL}
+                           className="absolute top-2 right-2 bg-white text-gray-800 p-1 rounded hover:bg-gray-200 shadow"
+                           title="Copiar SQL"
+                       >
+                           {sqlCopied ? <CheckCircle2 className="w-4 h-4 text-green-600"/> : <Copy className="w-4 h-4"/>}
+                       </button>
+                   </div>
+               </div>
+
                <button 
                 onClick={handleSetupDatabase}
                 disabled={loading}
                 className="w-full bg-orange-600 text-white py-3 rounded-lg font-bold hover:bg-orange-700 transition flex items-center justify-center shadow-md"
                >
                    {loading ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <PlayCircle className="w-5 h-5 mr-2" />}
-                   {loading ? 'Configurando...' : 'Criar Tabelas Agora'}
+                   {loading ? 'Verificando...' : 'Já criei, verificar agora'}
                </button>
                {error && <p className="mt-3 text-red-600 text-sm font-bold bg-white p-2 rounded border border-red-100">{error}</p>}
                
@@ -240,7 +252,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             {error && !showDiagnostics && (
                 <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center flex flex-col items-center border border-red-200">
                 <span className="flex items-center font-bold mb-1">
-                    <AlertCircle className="w-4 h-4 mr-2" /> Erro
+                    <AlertCircle className="w-4 h-4 mr-2" /> Atenção
                 </span>
                 {error}
                 </div>
@@ -253,7 +265,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             )}
 
             <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Usuário</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email / Usuário</label>
                 <div className="relative">
                 <UserIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
@@ -262,7 +274,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="admin"
+                    placeholder="gustavo_benvindo80@hotmail.com"
                 />
                 </div>
             </div>
@@ -277,7 +289,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="123456"
+                    placeholder="••••••••"
                 />
                 </div>
             </div>
@@ -294,10 +306,10 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         
         <div className="mt-8 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
           &copy; 2025 Gestão Confecção. <br/>
-          {process.env.VITE_TURSO_DATABASE_URL ? (
-             <span className="text-green-500">Ambiente Detectado</span>
+          {process.env.VITE_SUPABASE_URL ? (
+             <span className="text-green-500">Supabase Conectado</span>
           ) : (
-             <span className="text-red-400">Ambiente não detectado</span>
+             <span className="text-red-400">Supabase Desconectado</span>
           )}
         </div>
       </div>
