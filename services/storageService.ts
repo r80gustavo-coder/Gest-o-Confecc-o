@@ -6,6 +6,80 @@ export const initializeStorage = async () => {
   // Opcional: verificação de saúde da conexão
 };
 
+// --- SETUP DATABASE (Criação de Tabelas) ---
+export const setupDatabase = async () => {
+  try {
+    const queries = [
+      // Tabela Users
+      `CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('admin', 'rep')),
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`,
+      // Tabela Products
+      `CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        reference TEXT NOT NULL,
+        color TEXT NOT NULL,
+        grid_type TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`,
+      // Tabela Clients
+      `CREATE TABLE IF NOT EXISTS clients (
+        id TEXT PRIMARY KEY,
+        rep_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        city TEXT NOT NULL,
+        neighborhood TEXT,
+        state TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`,
+      // Tabela Orders
+      `CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        display_id INTEGER,
+        rep_id TEXT NOT NULL,
+        rep_name TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        client_name TEXT NOT NULL,
+        client_city TEXT,
+        client_state TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        delivery_date TEXT,
+        payment_method TEXT,
+        status TEXT DEFAULT 'open',
+        items TEXT NOT NULL,
+        total_pieces INTEGER NOT NULL
+      )`
+    ];
+
+    // Executar criação de tabelas
+    for (const sql of queries) {
+      await turso.execute(sql);
+    }
+
+    // Criar usuário Admin padrão se não existir
+    try {
+      await turso.execute({
+        sql: "INSERT INTO users (id, name, username, password, role) VALUES (?, ?, ?, ?, ?)",
+        args: ['admin_init_01', 'Administrador', 'admin', '123456', 'admin']
+      });
+      console.log("Usuário admin criado.");
+    } catch (e) {
+      // Ignora erro se usuário já existir (violação de UNIQUE)
+      console.log("Usuário admin já existe ou erro ao criar:", e);
+    }
+
+    return { success: true, message: "Banco de dados configurado com sucesso!" };
+  } catch (error: any) {
+    console.error("Erro ao configurar banco:", error);
+    return { success: false, message: error.message || "Erro desconhecido" };
+  }
+};
+
 // --- USERS ---
 export const getUsers = async (): Promise<User[]> => {
   try {

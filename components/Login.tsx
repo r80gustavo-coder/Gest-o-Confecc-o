@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { getUsers } from '../services/storageService';
-import { Lock, User as UserIcon, Loader2 } from 'lucide-react';
+import { getUsers, setupDatabase } from '../services/storageService';
+import { Lock, User as UserIcon, Loader2, Database } from 'lucide-react';
 
 interface Props {
   onLogin: (user: User) => void;
@@ -12,11 +12,13 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [setupMsg, setSetupMsg] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSetupMsg('');
 
     try {
       const users = await getUsers();
@@ -25,10 +27,30 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       if (validUser) {
         onLogin(validUser);
       } else {
-        setError('Credenciais inválidas. Tente novamente.');
+        setError('Credenciais inválidas. Tente novamente. Se for o primeiro acesso, certifique-se que o banco foi configurado.');
       }
     } catch (err) {
-      setError('Erro ao conectar com o servidor.');
+      console.error(err);
+      setError('Erro ao conectar com o banco de dados. Verifique sua conexão.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetupDatabase = async () => {
+    if (!confirm('Isso irá criar as tabelas necessárias no banco de dados Turso se elas não existirem. Deseja continuar?')) return;
+    
+    setLoading(true);
+    setSetupMsg('Configurando banco...');
+    try {
+      const result = await setupDatabase();
+      if (result.success) {
+        setSetupMsg('✅ Sucesso! Tente logar com: admin / 123456');
+      } else {
+        setError('Erro na configuração: ' + result.message);
+      }
+    } catch (e) {
+      setError('Falha crítica ao configurar banco.');
     } finally {
       setLoading(false);
     }
@@ -47,6 +69,12 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center">
               {error}
             </div>
+          )}
+
+          {setupMsg && (
+             <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm text-center font-bold">
+               {setupMsg}
+             </div>
           )}
 
           <div>
@@ -88,7 +116,17 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           </button>
         </form>
         
-        <div className="mt-6 text-center text-xs text-gray-400">
+        <div className="mt-8 pt-6 border-t border-gray-100">
+          <button 
+            type="button"
+            onClick={handleSetupDatabase}
+            className="w-full flex items-center justify-center text-xs text-gray-500 hover:text-blue-600 transition"
+          >
+            <Database className="w-3 h-3 mr-1" /> Configurar Banco de Dados (Primeiro Acesso)
+          </button>
+        </div>
+
+        <div className="mt-4 text-center text-xs text-gray-400">
           &copy; 2025 Gestão Confecção. Todos os direitos reservados.
         </div>
       </div>
