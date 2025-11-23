@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
 import { getOrders, getClients } from '../services/storageService';
-import { Package, Clock, CheckCircle, Search, Eye, X, Loader2 } from 'lucide-react';
+import { Package, Clock, CheckCircle, Search, Eye, X } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -10,22 +10,17 @@ interface Props {
 const RepOrderList: React.FC<Props> = ({ user }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  
+  // Filters
   const [selectedClientId, setSelectedClientId] = useState('');
+
+  // Modal State
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-        setLoading(true);
-        const [clis, ords] = await Promise.all([
-            getClients(user.id),
-            getOrders()
-        ]);
-        setClients(clis);
-        setOrders(ords.filter(o => o.repId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-        setLoading(false);
-    };
-    fetchData();
+    setClients(getClients(user.id));
+    const allOrders = getOrders();
+    setOrders(allOrders.filter(o => o.repId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
   }, [user.id]);
 
   const filteredOrders = selectedClientId 
@@ -53,9 +48,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
         </div>
         
         <div className="grid gap-4">
-            {loading && <div className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" /></div>}
-            
-            {!loading && filteredOrders.map(order => (
+            {filteredOrders.map(order => (
                 <div key={order.id} className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-400 flex flex-col md:flex-row justify-between items-center">
                     <div className="mb-2 md:mb-0">
                         <div className="flex items-center gap-2">
@@ -86,7 +79,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                     </div>
                 </div>
             ))}
-            {!loading && filteredOrders.length === 0 && (
+            {filteredOrders.length === 0 && (
                 <div className="text-center py-12 bg-white rounded-lg border border-dashed">
                     <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
                     <p className="text-gray-500">Nenhum pedido encontrado.</p>

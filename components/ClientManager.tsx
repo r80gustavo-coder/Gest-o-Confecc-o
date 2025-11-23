@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Client } from '../types';
 import { getClients, addClient } from '../services/storageService';
-import { Plus, MapPin, Store, Loader2 } from 'lucide-react';
+import { Plus, MapPin, Store } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -12,27 +12,19 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const [form, setForm] = useState({
     name: '', city: '', neighborhood: '', state: ''
   });
-  const [loading, setLoading] = useState(true);
-
-  const fetchClients = async () => {
-    setLoading(true);
-    const data = await getClients(user.id);
-    setClients(data);
-    setLoading(false);
-  };
 
   useEffect(() => {
-    fetchClients();
+    setClients(getClients(user.id));
   }, [user.id]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    await addClient({
+    addClient({
         id: crypto.randomUUID(),
         repId: user.id,
         ...form
     });
-    await fetchClients();
+    setClients(getClients(user.id));
     setForm({ name: '', city: '', neighborhood: '', state: '' });
   };
 
@@ -93,7 +85,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-         {loading ? <Loader2 className="animate-spin text-blue-500" /> : clients.map(client => (
+         {clients.map(client => (
              <div key={client.id} className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
                  <h4 className="font-bold text-lg text-gray-800">{client.name}</h4>
                  <div className="flex items-center text-gray-500 mt-2">
@@ -103,7 +95,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
                  <p className="text-xs text-gray-400 mt-1">{client.neighborhood}</p>
              </div>
          ))}
-         {!loading && clients.length === 0 && (
+         {clients.length === 0 && (
              <div className="col-span-3 text-center text-gray-400 py-10">
                  Você ainda não tem clientes cadastrados.
              </div>

@@ -1,28 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem } from '../types';
 import { getOrders, updateOrderStatus } from '../services/storageService';
-import { Printer, Calculator, CheckCircle, X, Loader2 } from 'lucide-react';
+import { Printer, Calculator, CheckCircle, X } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const AdminOrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
   
+  // Date Range Filters
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  
+  // Aggregation Modal State
   const [showAggregation, setShowAggregation] = useState(false);
 
-  const fetchOrders = async () => {
-    setLoading(true);
-    const data = await getOrders();
-    setOrders(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchOrders();
+    setOrders(getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
   }, []);
 
   const toggleSelect = (id: string) => {
@@ -41,19 +36,18 @@ const AdminOrderList: React.FC = () => {
 
   const handleSelectAllFiltered = () => {
     if (selectedOrderIds.size === filteredOrders.length && filteredOrders.length > 0) {
-        setSelectedOrderIds(new Set()); 
+        setSelectedOrderIds(new Set()); // Deselect all
     } else {
-        setSelectedOrderIds(new Set(filteredOrders.map(o => o.id)));
+        setSelectedOrderIds(new Set(filteredOrders.map(o => o.id))); // Select all currently visible
     }
   };
 
-  const handlePrintIndividual = async (order: Order) => {
+  const handlePrintIndividual = (order: Order) => {
     const printContent = document.getElementById(`print-order-${order.id}`);
     if (printContent) {
-        // Optimistic update
-        const updatedOrders = orders.map(o => o.id === order.id ? { ...o, status: 'printed' as const } : o);
-        setOrders(updatedOrders);
-        await updateOrderStatus(order.id, 'printed');
+        updateOrderStatus(order.id, 'printed');
+        const newOrders = getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setOrders(newOrders);
         
         const win = window.open('', '', 'height=700,width=900');
         if(win) {
@@ -71,9 +65,10 @@ const AdminOrderList: React.FC = () => {
     }
   };
 
+  // Logic to aggregate items from selected orders
   const getAggregatedItems = () => {
     const selected = orders.filter(o => selectedOrderIds.has(o.id));
-    const aggregation: Record<string, OrderItem> = {}; 
+    const aggregation: Record<string, OrderItem> = {}; // Key: Ref-Color
 
     selected.forEach(order => {
       order.items.forEach(item => {
@@ -107,6 +102,7 @@ const AdminOrderList: React.FC = () => {
         ? `Período: ${new Date(startDate).toLocaleDateString()} até ${new Date(endDate).toLocaleDateString()}`
         : 'Relatório Geral';
     
+    // Calculate vertical totals per size for the footer
     const sizeTotals: Record<string, number> = {};
     ALL_SIZES.forEach(s => sizeTotals[s] = 0);
     aggregatedItems.forEach(item => {
@@ -182,10 +178,7 @@ const AdminOrderList: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-4 rounded-lg shadow-sm">
-        <div className="flex items-center gap-2">
-           <h2 className="text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
-           {loading && <Loader2 className="w-5 h-5 animate-spin text-blue-600" />}
-        </div>
+        <h2 className="text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
         <div className="flex flex-col md:flex-row gap-4 items-center w-full xl:w-auto">
            <div className="flex items-center gap-2">
              <span className="text-sm text-gray-500 font-medium">De:</span>
@@ -218,6 +211,7 @@ const AdminOrderList: React.FC = () => {
         </div>
       </div>
 
+      {/* Orders Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden no-print">
         <table className="w-full text-left border-collapse">
           <thead className="bg-gray-50 text-gray-600 text-sm font-bold uppercase">
@@ -240,10 +234,8 @@ const AdminOrderList: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {loading ? (
-                <tr><td colSpan={8} className="p-8 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" /></td></tr>
-            ) : filteredOrders.length === 0 ? (
-                <tr><td colSpan={8} className="p-8 text-center text-gray-400">Nenhum pedido encontrado.</td></tr>
+            {filteredOrders.length === 0 ? (
+                <tr><td colSpan={8} className="p-8 text-center text-gray-400">Nenhum pedido encontrado neste período.</td></tr>
             ) : filteredOrders.map(order => (
               <tr key={order.id} className={`hover:bg-blue-50 transition ${selectedOrderIds.has(order.id) ? 'bg-blue-50' : ''}`}>
                 <td className="p-4">
@@ -284,7 +276,7 @@ const AdminOrderList: React.FC = () => {
                     <Printer className="w-5 h-5" />
                   </button>
                   
-                  {/* Print Template - Hidden */}
+                  {/* Hidden Print Template for Individual Orders */}
                   <div id={`print-order-${order.id}`} className="hidden">
                     <div className="border-2 border-black p-8 font-sans max-w-3xl mx-auto">
                         <div className="flex justify-between border-b-2 border-black pb-4 mb-6">
@@ -347,8 +339,7 @@ const AdminOrderList: React.FC = () => {
                             <tfoot>
                                 <tr className="bg-gray-100">
                                     <td colSpan={2} className="border border-black p-2 text-right font-bold uppercase">Total Peças</td>
-                                    <td colSpan={ALL_SIZES.length} className="border border-black p-2"></td>
-                                    <td className="border border-black p-2 text-right font-bold text-lg">{order.totalPieces}</td>
+                                    <td colSpan={ALL_SIZES.length + 1} className="border border-black p-2 text-right font-bold text-lg">{order.totalPieces}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -359,6 +350,7 @@ const AdminOrderList: React.FC = () => {
                         </div>
                     </div>
                   </div>
+                  {/* End Print Template */}
 
                 </td>
               </tr>
@@ -367,6 +359,7 @@ const AdminOrderList: React.FC = () => {
         </table>
       </div>
 
+      {/* Aggregation Modal (Production List) */}
       {showAggregation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print p-4">
           <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -376,7 +369,7 @@ const AdminOrderList: React.FC = () => {
                   <Calculator className="w-5 h-5 mr-2" /> Resumo de Produção
                 </h2>
                 <p className="text-sm text-purple-600 mt-1">
-                  Consolidado de {selectedOrderIds.size} pedidos selecionados
+                  Consolidado de {selectedOrderIds.size} pedidos selecionados ({startDate ? `De ${new Date(startDate).toLocaleDateString()}` : 'Início'} até {endDate ? new Date(endDate).toLocaleDateString() : 'Hoje'})
                 </p>
               </div>
               <button onClick={() => setShowAggregation(false)} className="p-2 hover:bg-purple-100 rounded-full">

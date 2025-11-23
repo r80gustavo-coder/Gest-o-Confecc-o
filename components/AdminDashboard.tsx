@@ -3,7 +3,7 @@ import { Order } from '../types';
 import { getOrders } from '../services/storageService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import { generateSalesAnalysis } from '../services/geminiService';
-import { Sparkles, RefreshCcw, TrendingUp, Users, ShoppingBag, Package, Calendar, Loader2 } from 'lucide-react';
+import { Sparkles, RefreshCcw, TrendingUp, Users, ShoppingBag, Package, Calendar } from 'lucide-react';
 
 interface Props {
   onNavigate: (tab: string) => void;
@@ -11,29 +11,22 @@ interface Props {
 
 const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
   const [aiAnalysis, setAiAnalysis] = useState<string>("");
   const [loadingAi, setLoadingAi] = useState(false);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const data = await getOrders();
-    setOrders(data);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchData();
+    setOrders(getOrders());
   }, []);
 
   // --- ANALYTICS CALCULATIONS ---
-  // (Mantive a mesma lógica de cálculo, apenas envolvi em verificação de loading)
 
+  // 1. Basic KPIs
   const totalOrders = orders.length;
   const totalPieces = orders.reduce((acc, curr) => acc + curr.totalPieces, 0);
   const avgPiecesPerOrder = totalOrders > 0 ? Math.round(totalPieces / totalOrders) : 0;
   const activeClients = new Set(orders.map(o => o.clientId)).size;
 
+  // 2. Rep Performance (Ranking)
   const repPerfMap: Record<string, { orders: number; pieces: number }> = {};
   orders.forEach(o => {
     if (!repPerfMap[o.repName]) repPerfMap[o.repName] = { orders: 0, pieces: 0 };
@@ -45,6 +38,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
     .map(rep => ({ name: rep, pecas: repPerfMap[rep].pieces, pedidos: repPerfMap[rep].orders }))
     .sort((a, b) => b.pecas - a.pecas);
 
+  // 3. Top Products (Reference + Color)
   const productSales: Record<string, number> = {};
   orders.forEach(o => {
     o.items.forEach(item => {
@@ -56,8 +50,9 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
   const topProductsData = Object.keys(productSales)
     .map(key => ({ name: key, pecas: productSales[key] }))
     .sort((a, b) => b.pecas - a.pecas)
-    .slice(0, 8);
+    .slice(0, 8); // Top 8
 
+  // 4. Colors for Charts
   const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'];
 
   const handleAiAnalysis = async () => {
@@ -67,10 +62,6 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
     setAiAnalysis(result || "Sem dados suficientes.");
     setLoadingAi(false);
   };
-
-  if (loading) {
-    return <div className="flex h-64 items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-500" /></div>;
-  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -90,7 +81,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
              {loadingAi ? 'Analisando...' : 'Gerar Análise IA'}
            </button>
            <button 
-             onClick={fetchData}
+             onClick={() => window.location.reload()}
              className="p-2 bg-white border rounded-lg hover:bg-gray-50 transition shadow-sm"
              title="Atualizar Dados"
            >
@@ -152,6 +143,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Top Products Chart */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 mb-6">Top Produtos (Referência + Cor)</h3>
             <div className="h-80">
@@ -171,6 +163,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
             </div>
         </div>
 
+        {/* Representative Performance Chart */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 mb-6">Ranking de Representantes</h3>
             <div className="h-80">

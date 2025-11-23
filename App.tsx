@@ -9,19 +9,18 @@ import ClientManager from './components/ClientManager';
 import RepOrderForm from './components/RepOrderForm';
 import RepOrderList from './components/RepOrderList';
 import { User, Role } from './types';
+import { getUsers, initializeStorage } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    // Check local session persistence first (simple approach)
+    initializeStorage();
     const savedUser = localStorage.getItem('current_user');
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
-    setCheckingAuth(false);
   }, []);
 
   const handleLogin = (u: User) => {
@@ -35,10 +34,6 @@ const App: React.FC = () => {
     localStorage.removeItem('current_user');
     setActiveTab('dashboard');
   };
-
-  if (checkingAuth) {
-    return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
-  }
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
