@@ -34,8 +34,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           if (health.status === 'missing_tables') {
               setNeedsSetup(true);
           } else if (health.status === 'error') {
-              // Se der erro de conexão, mostramos no diagnóstico, mas permitimos tentar logar/configurar
               setError(`Erro de conexão: ${health.message}`);
+              // Se der erro, abre o diagnóstico automaticamente para ajudar o usuário
+              setShowDiagnostics(true);
           }
       } catch (e) {
           console.error("Health check failed", e);
@@ -67,6 +68,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           setNeedsSetup(true);
       } else {
           setError('Erro ao tentar login. Verifique o diagnóstico.');
+          setShowDiagnostics(true);
       }
     } finally {
       setLoading(false);
@@ -131,9 +133,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           <p className="text-gray-500 mt-2">Sistema de Gestão de Pedidos</p>
         </div>
 
-        {/* Painel de Diagnóstico (Aparece se clicar na engrenagem ou se houver erro grave) */}
+        {/* Painel de Diagnóstico */}
         {(showDiagnostics || error.includes("Erro de conexão")) && (
-            <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200 text-sm">
+            <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200 text-sm animate-fade-in">
                 <h3 className="font-bold text-gray-700 mb-2 border-b pb-1">Diagnóstico do Sistema</h3>
                 
                 <div className="flex justify-between items-center mb-1">
@@ -149,6 +151,11 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 {healthStatus?.message && (
                     <div className="mt-2 p-2 bg-red-100 text-red-800 rounded text-xs break-words font-mono">
                         {healthStatus.message}
+                        {(healthStatus.message.includes("Failed to fetch") || healthStatus.message.includes("NetworkError")) && (
+                            <div className="mt-2 font-sans font-bold text-red-900">
+                                Dica: O sistema tentou corrigir a URL automaticamente para HTTPS. Se o erro persistir, verifique se a URL no .env termina exatamente em ".turso.io" sem caracteres estranhos depois.
+                            </div>
+                        )}
                     </div>
                 )}
                 
@@ -189,7 +196,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
            </div>
         ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
+            {error && !showDiagnostics && (
                 <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center flex flex-col items-center border border-red-200">
                 <span className="flex items-center font-bold mb-1">
                     <AlertCircle className="w-4 h-4 mr-2" /> Erro
