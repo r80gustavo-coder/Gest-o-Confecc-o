@@ -9,12 +9,20 @@ const ProductManager: React.FC = () => {
   const [newColor, setNewColor] = useState('');
   const [newGrid, setNewGrid] = useState<SizeGridType>(SizeGridType.ADULT);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    const data = await getProducts();
+    setProducts(data);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setProducts(getProducts());
+    fetchProducts();
   }, []);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -23,7 +31,7 @@ const ProductManager: React.FC = () => {
         return;
     }
 
-    // Uniqueness Check
+    // Uniqueness Check locally to save a request, though backend checks too
     const exists = products.some(p => 
         p.reference.toUpperCase() === newRef.toUpperCase() && 
         p.color.toUpperCase() === newColor.toUpperCase()
@@ -33,23 +41,26 @@ const ProductManager: React.FC = () => {
         setError('Esta combinação de Referência e Cor já existe no catálogo.');
         return;
     }
-
-    addProduct({
+    
+    setLoading(true);
+    await addProduct({
         id: crypto.randomUUID(),
         reference: newRef.toUpperCase(),
         color: newColor.toUpperCase(),
         gridType: newGrid
     });
 
-    setProducts(getProducts());
+    await fetchProducts();
     setNewColor(''); // Keep Ref for faster entry
-    // setNewRef(''); 
+    setLoading(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja remover este produto do catálogo?')) {
-        deleteProduct(id);
-        setProducts(getProducts());
+        setLoading(true);
+        await deleteProduct(id);
+        await fetchProducts();
+        setLoading(false);
     }
   };
 
@@ -95,9 +106,10 @@ const ProductManager: React.FC = () => {
           </div>
           <button 
             type="submit"
-            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center h-[42px]"
+            disabled={loading}
+            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center h-[42px] disabled:opacity-50"
           >
-            <Plus className="w-5 h-5 mr-2" /> Adicionar
+            <Plus className="w-5 h-5 mr-2" /> {loading ? '...' : 'Adicionar'}
           </button>
         </form>
       </div>
@@ -114,7 +126,7 @@ const ProductManager: React.FC = () => {
             </thead>
             <tbody className="divide-y">
                 {products.length === 0 && (
-                    <tr><td colSpan={4} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
+                    <tr><td colSpan={4} className="p-6 text-center text-gray-400">{loading ? 'Carregando...' : 'Nenhum produto cadastrado.'}</td></tr>
                 )}
                 {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => (
                     <tr key={prod.id} className="hover:bg-gray-50">

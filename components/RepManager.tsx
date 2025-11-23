@@ -1,42 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
 import { getUsers, addUser, deleteUser } from '../services/storageService';
-import { Trash, Plus, UserPlus, Shield } from 'lucide-react';
+import { Trash, Plus, UserPlus } from 'lucide-react';
 
 const RepManager: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    const data = await getUsers();
+    setUsers(data);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setUsers(getUsers());
+    fetchUsers();
   }, []);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (users.find(u => u.username === username)) {
         alert('Este usuário já existe.');
         return;
     }
-
-    addUser({
+    setLoading(true);
+    await addUser({
         id: crypto.randomUUID(),
         name,
         username,
         password,
         role: Role.REP
     });
-    setUsers(getUsers());
+    await fetchUsers();
     setName('');
     setUsername('');
     setPassword('');
+    setLoading(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja remover este representante?')) {
-        deleteUser(id);
-        setUsers(getUsers());
+        setLoading(true);
+        await deleteUser(id);
+        await fetchUsers();
+        setLoading(false);
     }
   };
 
@@ -81,9 +92,10 @@ const RepManager: React.FC = () => {
           </div>
           <button 
             type="submit"
-            className="bg-green-600 text-white p-2 rounded hover:bg-green-700 font-medium flex justify-center items-center h-[42px]"
+            disabled={loading}
+            className="bg-green-600 text-white p-2 rounded hover:bg-green-700 font-medium flex justify-center items-center h-[42px] disabled:opacity-50"
           >
-            <Plus className="w-5 h-5 mr-2" /> Cadastrar
+            <Plus className="w-5 h-5 mr-2" /> {loading ? '...' : 'Cadastrar'}
           </button>
         </form>
       </div>
@@ -106,7 +118,7 @@ const RepManager: React.FC = () => {
         ))}
         {users.filter(u => u.role === Role.REP).length === 0 && (
             <div className="col-span-3 text-center text-gray-500 py-8">
-                Nenhum representante cadastrado.
+                {loading ? 'Carregando...' : 'Nenhum representante cadastrado.'}
             </div>
         )}
       </div>

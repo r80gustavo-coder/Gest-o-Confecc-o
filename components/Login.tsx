@@ -1,26 +1,103 @@
-import React, { useState } from 'react';
-import { User } from '../types';
-import { getUsers } from '../services/storageService';
-import { Lock, User as UserIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Role } from '../types';
+import { getUsers, addUser } from '../services/storageService';
+import { Lock, User as UserIcon, Check, AlertTriangle } from 'lucide-react';
+import { supabase } from '../services/supabase';
 
 interface Props {
   onLogin: (user: User) => void;
 }
 
-const Login: React.FC<Props> = ({ onLogin }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+const MASTER_EMAIL = 'gustavo_benvindo80@hotmail.com';
+const MASTER_PASS = 'Gustavor80';
 
-  const handleSubmit = (e: React.FormEvent) => {
+const Login: React.FC<Props> = ({ onLogin }) => {
+  const [username, setUsername] = useState(MASTER_EMAIL);
+  const [password, setPassword] = useState(MASTER_PASS);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'error'>('checking');
+
+  useEffect(() => {
+    checkConnection();
+  }, []);
+
+  const checkConnection = async () => {
+    try {
+      // Teste simples de conexão
+      const { error } = await supabase.from('users').select('id').limit(1);
+      if (error) {
+          console.error(error);
+          setDbStatus('error');
+      } else {
+          setDbStatus('connected');
+      }
+    } catch (e) {
+      setDbStatus('error');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const users = getUsers();
-    const validUser = users.find(u => u.username === username && u.password === password);
-    
-    if (validUser) {
-      onLogin(validUser);
-    } else {
-      setError('Credenciais inválidas. Tente novamente.');
+    setLoading(true);
+    setError('');
+
+    try {
+      // 1. Tenta buscar usuários do banco
+      const users = await getUsers();
+      const validUser = users.find(u => u.username === username && u.password === password);
+      
+      if (validUser) {
+        onLogin(validUser);
+        return;
+      }
+
+      // 2. Fallback de Segurança (Master Login)
+      // Se a tabela users estiver vazia (primeiro acesso) ou der erro, mas as credenciais forem do mestre:
+      if (username === MASTER_EMAIL && password === MASTER_PASS) {
+          console.log("Usando Master Login Override");
+          
+          // Tenta criar o usuário no banco se ele não existir, para o futuro
+          const masterUser: User = {
+            id: crypto.randomUUID(),
+            name: 'Gustavo Benvindo',
+            username: MASTER_EMAIL,
+            password: MASTER_PASS,
+            role: Role.ADMIN
+          };
+
+          // Verificamos se já existe antes de tentar inserir
+          const exists = users.find(u => u.username === MASTER_EMAIL);
+          if (!exists) {
+            await addUser(masterUser);
+          } else {
+             // Se existe mas a senha estava errada no banco e certa aqui, atualizamos o objeto local
+             masterUser.id = exists.id;
+          }
+
+          onLogin(masterUser);
+          return;
+      }
+
+      setError('Usuário ou senha inválidos.');
+      
+    } catch (err) {
+      console.error(err);
+      // Se tudo falhar, mas for o mestre, deixa entrar
+      if (username === MASTER_EMAIL && password === MASTER_PASS) {
+         onLogin({
+            id: 'admin-offline',
+            name: 'Gustavo Benvindo',
+            username: MASTER_EMAIL,
+            password: MASTER_PASS,
+            role: Role.ADMIN
+         });
+         alert('Aviso: Login realizado em modo de contingência (Erro no DB).');
+      } else {
+         setError('Erro ao conectar ao sistema.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -30,6 +107,18 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-blue-900">Confecção Pro</h1>
           <p className="text-gray-500 mt-2">Sistema de Gestão de Pedidos</p>
+          
+          <div className="flex justify-center mt-4">
+             {dbStatus === 'connected' ? (
+                 <span className="flex items-center text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                     <Check className="w-3 h-3 mr-1" /> Servidor Conectado
+                 </span>
+             ) : (
+                 <span className="flex items-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
+                     <AlertTriangle className="w-3 h-3 mr-1" /> Verificando Conexão
+                 </span>
+             )}
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -40,7 +129,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Usuário / Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
             <div className="relative">
               <UserIcon className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <input
@@ -49,7 +138,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Digite seu usuário"
+                placeholder="email@exemplo.com"
               />
             </div>
           </div>
@@ -71,14 +160,15 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200 shadow-md"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200 shadow-md flex justify-center disabled:opacity-70"
           >
-            Entrar no Sistema
+            {loading ? 'Entrando...' : 'Acessar Painel'}
           </button>
         </form>
         
         <div className="mt-6 text-center text-xs text-gray-400">
-          &copy; 2025 Gestão Confecção. Todos os direitos reservados.
+          &copy; 2025 Gestão Confecção Pro
         </div>
       </div>
     </div>

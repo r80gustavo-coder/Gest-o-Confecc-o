@@ -13,13 +13,20 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<string>("");
   const [loadingAi, setLoadingAi] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const data = await getOrders();
+    setOrders(data);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setOrders(getOrders());
+    fetchData();
   }, []);
 
   // --- ANALYTICS CALCULATIONS ---
-
   // 1. Basic KPIs
   const totalOrders = orders.length;
   const totalPieces = orders.reduce((acc, curr) => acc + curr.totalPieces, 0);
@@ -63,6 +70,8 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
     setLoadingAi(false);
   };
 
+  if (loading) return <div className="p-8 text-center text-gray-500">Carregando dados...</div>;
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
@@ -81,7 +90,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
              {loadingAi ? 'Analisando...' : 'Gerar Análise IA'}
            </button>
            <button 
-             onClick={() => window.location.reload()}
+             onClick={fetchData}
              className="p-2 bg-white border rounded-lg hover:bg-gray-50 transition shadow-sm"
              title="Atualizar Dados"
            >

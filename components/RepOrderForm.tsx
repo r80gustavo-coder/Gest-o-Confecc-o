@@ -13,6 +13,7 @@ const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [products, setProducts] = useState<ProductDef[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(false);
   
   // Form State
   const [selectedClientId, setSelectedClientId] = useState('');
@@ -37,8 +38,15 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [quickSizes, setQuickSizes] = useState<{[key: string]: string}>({});
 
   useEffect(() => {
-    setProducts(getProducts());
-    setClients(getClients(user.id));
+    const loadData = async () => {
+        const [prodData, clientData] = await Promise.all([
+            getProducts(),
+            getClients(user.id)
+        ]);
+        setProducts(prodData);
+        setClients(clientData);
+    };
+    loadData();
   }, [user.id]);
 
   useEffect(() => {
@@ -135,13 +143,14 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     }
   };
 
-  const handleSaveOrder = () => {
+  const handleSaveOrder = async () => {
     if (!selectedClientId || items.length === 0) return;
 
     const client = clients.find(c => c.id === selectedClientId);
     if (!client) return;
 
-    addOrder({
+    setLoading(true);
+    await addOrder({
       id: crypto.randomUUID(),
       repId: user.id,
       repName: user.name,
@@ -156,6 +165,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       items,
       totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0)
     });
+    setLoading(false);
 
     onOrderCreated();
   };
@@ -384,11 +394,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       <div className="mt-6 flex justify-end">
         <button 
           onClick={handleSaveOrder}
-          disabled={items.length === 0 || !selectedClientId || editingIndex !== null}
+          disabled={loading || items.length === 0 || !selectedClientId || editingIndex !== null}
           className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 shadow-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="w-5 h-5 mr-2" />
-          {editingIndex !== null ? 'Termine a edição antes de salvar' : 'Finalizar Pedido'}
+          {editingIndex !== null ? 'Termine a edição antes de salvar' : (loading ? 'Salvando...' : 'Finalizar Pedido')}
         </button>
       </div>
     </div>

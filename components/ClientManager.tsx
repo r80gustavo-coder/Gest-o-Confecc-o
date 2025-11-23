@@ -12,20 +12,30 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const [form, setForm] = useState({
     name: '', city: '', neighborhood: '', state: ''
   });
+  const [loading, setLoading] = useState(false);
+
+  const fetchClients = async () => {
+    setLoading(true);
+    const data = await getClients(user.id);
+    setClients(data);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setClients(getClients(user.id));
+    fetchClients();
   }, [user.id]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addClient({
+    setLoading(true);
+    await addClient({
         id: crypto.randomUUID(),
         repId: user.id,
         ...form
     });
-    setClients(getClients(user.id));
+    await fetchClients();
     setForm({ name: '', city: '', neighborhood: '', state: '' });
+    setLoading(false);
   };
 
   return (
@@ -77,8 +87,8 @@ const ClientManager: React.FC<Props> = ({ user }) => {
                 />
             </div>
             <div className="md:col-span-2 flex justify-end mt-2">
-                <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center">
-                    <Plus className="w-4 h-4 mr-2" /> Salvar Cliente
+                <button type="submit" disabled={loading} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center disabled:opacity-50">
+                    <Plus className="w-4 h-4 mr-2" /> {loading ? 'Salvando...' : 'Salvar Cliente'}
                 </button>
             </div>
         </form>
@@ -97,7 +107,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
          ))}
          {clients.length === 0 && (
              <div className="col-span-3 text-center text-gray-400 py-10">
-                 Você ainda não tem clientes cadastrados.
+                 {loading ? 'Carregando...' : 'Você ainda não tem clientes cadastrados.'}
              </div>
          )}
       </div>

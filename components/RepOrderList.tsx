@@ -10,6 +10,7 @@ interface Props {
 const RepOrderList: React.FC<Props> = ({ user }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Filters
   const [selectedClientId, setSelectedClientId] = useState('');
@@ -18,14 +19,25 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
 
   useEffect(() => {
-    setClients(getClients(user.id));
-    const allOrders = getOrders();
-    setOrders(allOrders.filter(o => o.repId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    const loadData = async () => {
+        setLoading(true);
+        const [allOrders, allClients] = await Promise.all([
+            getOrders(),
+            getClients(user.id)
+        ]);
+        
+        setClients(allClients);
+        setOrders(allOrders.filter(o => o.repId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        setLoading(false);
+    };
+    loadData();
   }, [user.id]);
 
   const filteredOrders = selectedClientId 
     ? orders.filter(o => o.clientId === selectedClientId)
     : orders;
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Carregando pedidos...</div>;
 
   return (
     <div className="space-y-6">
