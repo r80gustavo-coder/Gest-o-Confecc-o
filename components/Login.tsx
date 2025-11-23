@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
 import { getUsers, addUser } from '../services/storageService';
-import { Lock, User as UserIcon, Check, AlertTriangle } from 'lucide-react';
+import { Lock, User as UserIcon, Check, AlertTriangle, WifiOff } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
 interface Props {
@@ -24,10 +24,11 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
   const checkConnection = async () => {
     try {
-      // Teste simples de conexão
+      // Teste simples de conexão. Se a URL for placeholder, isso deve falhar.
       const { error } = await supabase.from('users').select('id').limit(1);
       if (error) {
-          console.error(error);
+          // Se for erro de tabela inexistente ou auth, tecnicamente conectou, mas vamos tratar falhas gerais como erro
+          console.warn("Status DB:", error.message);
           setDbStatus('error');
       } else {
           setDbStatus('connected');
@@ -53,11 +54,9 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       }
 
       // 2. Fallback de Segurança (Master Login)
-      // Se a tabela users estiver vazia (primeiro acesso) ou der erro, mas as credenciais forem do mestre:
       if (username === MASTER_EMAIL && password === MASTER_PASS) {
           console.log("Usando Master Login Override");
           
-          // Tenta criar o usuário no banco se ele não existir, para o futuro
           const masterUser: User = {
             id: crypto.randomUUID(),
             name: 'Gustavo Benvindo',
@@ -66,13 +65,14 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             role: Role.ADMIN
           };
 
-          // Verificamos se já existe antes de tentar inserir
-          const exists = users.find(u => u.username === MASTER_EMAIL);
-          if (!exists) {
-            await addUser(masterUser);
-          } else {
-             // Se existe mas a senha estava errada no banco e certa aqui, atualizamos o objeto local
-             masterUser.id = exists.id;
+          // Tenta criar o usuário no banco se a conexão existir
+          if (dbStatus === 'connected') {
+             const exists = users.find(u => u.username === MASTER_EMAIL);
+             if (!exists) {
+               await addUser(masterUser);
+             } else {
+               masterUser.id = exists.id;
+             }
           }
 
           onLogin(masterUser);
@@ -83,7 +83,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       
     } catch (err) {
       console.error(err);
-      // Se tudo falhar, mas for o mestre, deixa entrar
+      // Se tudo falhar (banco offline), mas for o mestre, deixa entrar
       if (username === MASTER_EMAIL && password === MASTER_PASS) {
          onLogin({
             id: 'admin-offline',
@@ -92,7 +92,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
             password: MASTER_PASS,
             role: Role.ADMIN
          });
-         alert('Aviso: Login realizado em modo de contingência (Erro no DB).');
+         alert('Aviso: Login realizado em modo OFFLINE. Algumas funções podem não salvar dados.');
       } else {
          setError('Erro ao conectar ao sistema.');
       }
@@ -110,12 +110,16 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           
           <div className="flex justify-center mt-4">
              {dbStatus === 'connected' ? (
-                 <span className="flex items-center text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                     <Check className="w-3 h-3 mr-1" /> Servidor Conectado
+                 <span className="flex items-center text-xs text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                     <Check className="w-3 h-3 mr-1" /> Banco de Dados Conectado
                  </span>
              ) : (
-                 <span className="flex items-center text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
-                     <AlertTriangle className="w-3 h-3 mr-1" /> Verificando Conexão
+                 <span className="flex items-center text-xs text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-100" title="Verifique o console para detalhes">
+                     {dbStatus === 'checking' ? (
+                        <>Verificando conexão...</>
+                     ) : (
+                        <><WifiOff className="w-3 h-3 mr-1" /> Sem Conexão com Banco</>
+                     )}
                  </span>
              )}
           </div>
@@ -123,7 +127,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center">
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 mr-2" />
               {error}
             </div>
           )}
