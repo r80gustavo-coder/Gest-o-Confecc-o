@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, getClients, addOrder } from '../services/storageService';
-import { Plus, Trash, Save, Edit2 } from 'lucide-react';
+import { Plus, Trash, Save, Edit2, Loader2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -13,6 +13,8 @@ const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [products, setProducts] = useState<ProductDef[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [loadingInit, setLoadingInit] = useState(true);
+  const [saving, setSaving] = useState(false);
   
   // Form State
   const [selectedClientId, setSelectedClientId] = useState('');
@@ -29,27 +31,30 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
   // Order Items
   const [items, setItems] = useState<OrderItem[]>([]);
-
-  // Helpers to speed up entry
   const [availableColors, setAvailableColors] = useState<string[]>([]);
-  
-  // Quick Entry Grid State
   const [quickSizes, setQuickSizes] = useState<{[key: string]: string}>({});
 
   useEffect(() => {
-    setProducts(getProducts());
-    setClients(getClients(user.id));
+    const init = async () => {
+        setLoadingInit(true);
+        const [prods, clis] = await Promise.all([
+            getProducts(),
+            getClients(user.id)
+        ]);
+        setProducts(prods);
+        setClients(clis);
+        setLoadingInit(false);
+    };
+    init();
   }, [user.id]);
 
   useEffect(() => {
-    // Filter colors when ref changes
     if (currentRef) {
       const colors = products
         .filter(p => p.reference === currentRef)
         .map(p => p.color);
       setAvailableColors([...new Set(colors)]);
       
-      // Auto select grid type from product def if possible, but only if not editing manually
       if (editingIndex === null) {
         const prod = products.find(p => p.reference === currentRef);
         if (prod) setCurrentGrid(prod.gridType);
@@ -63,7 +68,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     e.preventDefault();
     if (!currentRef || !currentColor) return;
 
-    // Convert quickSizes strings to numbers
     const sizesNum: {[key: string]: number} = {};
     let total = 0;
     Object.entries(quickSizes).forEach(([size, qtyStr]) => {
@@ -93,11 +97,8 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       setItems([...items, newItem]);
     }
     
-    // Reset form
     setQuickSizes({});
     setCurrentColor('');
-    // Keep Ref if we are just adding new lines, but if we were editing, maybe clear it?
-    // Let's keep Ref for speed unless we just finished an edit.
     if (editingIndex !== null) {
       setCurrentRef('');
     }
@@ -110,14 +111,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     setCurrentColor(item.color);
     setCurrentGrid(item.gridType);
     
-    // Convert numbers back to string for inputs
     const sizeStrings: {[key: string]: string} = {};
     Object.entries(item.sizes).forEach(([k, v]) => {
       sizeStrings[k] = v.toString();
     });
     setQuickSizes(sizeStrings);
-
-    // Scroll top
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -135,33 +133,41 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     }
   };
 
-  const handleSaveOrder = () => {
+  const handleSaveOrder = async () => {
     if (!selectedClientId || items.length === 0) return;
+    setSaving(true);
 
-    const client = clients.find(c => c.id === selectedClientId);
-    if (!client) return;
+    try {
+        const client = clients.find(c => c.id === selectedClientId);
+        if (!client) return;
 
-    addOrder({
-      id: crypto.randomUUID(),
-      repId: user.id,
-      repName: user.name,
-      clientId: client.id,
-      clientName: client.name,
-      clientCity: client.city,
-      clientState: client.state,
-      createdAt: new Date().toISOString(),
-      deliveryDate,
-      paymentMethod,
-      status: 'open',
-      items,
-      totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0)
-    });
+        await addOrder({
+          id: crypto.randomUUID(),
+          repId: user.id,
+          repName: user.name,
+          clientId: client.id,
+          clientName: client.name,
+          clientCity: client.city,
+          clientState: client.state,
+          createdAt: new Date().toISOString(),
+          deliveryDate,
+          paymentMethod,
+          status: 'open',
+          items,
+          totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0)
+        });
 
-    onOrderCreated();
+        onOrderCreated();
+    } catch (error) {
+        alert('Erro ao salvar pedido.');
+    } finally {
+        setSaving(false);
+    }
   };
 
-  // Unique list of references for datalist
   const uniqueRefs = [...new Set(products.map(p => p.reference))];
+
+  if (loadingInit) return <div className="p-8 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" /></div>;
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm">
@@ -169,7 +175,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         {editingIndex !== null ? 'Editando Item do Pedido' : 'Novo Pedido'}
       </h2>
 
-      {/* HEADER: Client Info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 pb-6 border-b">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
@@ -205,7 +210,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         </div>
       </div>
 
-      {/* INPUT AREA: "Excel Style" */}
       <div className={`p-4 rounded-lg mb-6 border transition-colors ${editingIndex !== null ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-100'}`}>
         <form onSubmit={handleAddItem} className="flex flex-col md:flex-row gap-4 items-end">
           <div className="flex-1 min-w-[150px]">
@@ -238,7 +242,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             </datalist>
           </div>
 
-          {/* Size Grid Inputs */}
           <div className="flex gap-1 bg-white p-2 rounded border border-gray-200 shadow-sm overflow-x-auto">
              {SIZE_GRIDS[currentGrid]?.map(size => (
                <div key={size} className="w-10">
@@ -306,7 +309,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         </div>
       </div>
 
-      {/* ITEMS TABLE (MATRIX VIEW) */}
       {items.length > 0 && (
         <div className="overflow-x-auto border rounded-lg shadow-sm">
           <table className="w-full text-sm text-left">
@@ -326,8 +328,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                 <tr key={idx} className={`hover:bg-blue-50 ${editingIndex === idx ? 'bg-orange-50 ring-2 ring-orange-200' : ''}`}>
                   <td className="p-3 font-bold text-gray-800">{item.reference}</td>
                   <td className="p-3 text-gray-600 uppercase">{item.color}</td>
-                  
-                  {/* Grid Columns */}
                   {ALL_SIZES.map(s => (
                     <td key={s} className="p-2 text-center">
                       {item.sizes[s] ? (
@@ -337,21 +337,18 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                       )}
                     </td>
                   ))}
-
                   <td className="p-3 text-right font-bold text-lg">{item.totalQty}</td>
                   <td className="p-3 text-center">
                     <div className="flex justify-center gap-2">
                       <button 
                         onClick={() => startEditItem(idx)} 
                         className="text-blue-500 hover:text-blue-700 p-1 hover:bg-blue-100 rounded"
-                        title="Editar Item"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button 
                         onClick={() => removeItem(idx)} 
                         className="text-red-500 hover:text-red-700 p-1 hover:bg-red-100 rounded"
-                        title="Remover Item"
                       >
                         <Trash className="w-4 h-4" />
                       </button>
@@ -365,11 +362,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                 <td colSpan={2} className="p-3 text-right uppercase text-xs tracking-wider">Totais da Grade:</td>
                 {ALL_SIZES.map(s => {
                    const totalSize = items.reduce((acc, i) => acc + (i.sizes[s] || 0), 0);
-                   return (
-                     <td key={s} className="p-2 text-center text-xs">
-                       {totalSize > 0 ? totalSize : ''}
-                     </td>
-                   )
+                   return <td key={s} className="p-2 text-center text-xs">{totalSize > 0 ? totalSize : ''}</td>
                 })}
                 <td className="p-3 text-right text-lg text-yellow-400">
                   {items.reduce((acc, i) => acc + i.totalQty, 0)}
@@ -384,11 +377,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       <div className="mt-6 flex justify-end">
         <button 
           onClick={handleSaveOrder}
-          disabled={items.length === 0 || !selectedClientId || editingIndex !== null}
+          disabled={items.length === 0 || !selectedClientId || editingIndex !== null || saving}
           className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 shadow-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Save className="w-5 h-5 mr-2" />
-          {editingIndex !== null ? 'Termine a edição antes de salvar' : 'Finalizar Pedido'}
+          {saving ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+          {editingIndex !== null ? 'Termine a edição antes de salvar' : saving ? 'Salvando...' : 'Finalizar Pedido'}
         </button>
       </div>
     </div>

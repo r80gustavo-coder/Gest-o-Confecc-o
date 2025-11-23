@@ -1,42 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
 import { getUsers, addUser, deleteUser } from '../services/storageService';
-import { Trash, Plus, UserPlus, Shield } from 'lucide-react';
+import { Trash, Plus, UserPlus, Loader2 } from 'lucide-react';
 
 const RepManager: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    const data = await getUsers();
+    setUsers(data);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setUsers(getUsers());
+    fetchUsers();
   }, []);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (users.find(u => u.username === username)) {
         alert('Este usuário já existe.');
         return;
     }
 
-    addUser({
+    await addUser({
         id: crypto.randomUUID(),
         name,
         username,
         password,
         role: Role.REP
     });
-    setUsers(getUsers());
+    await fetchUsers();
     setName('');
     setUsername('');
     setPassword('');
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja remover este representante?')) {
-        deleteUser(id);
-        setUsers(getUsers());
+        await deleteUser(id);
+        await fetchUsers();
     }
   };
 
@@ -89,7 +97,7 @@ const RepManager: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {users.filter(u => u.role === Role.REP).map(user => (
+        {loading ? <Loader2 className="animate-spin text-blue-500" /> : users.filter(u => u.role === Role.REP).map(user => (
             <div key={user.id} className="bg-white p-4 rounded-lg shadow border border-gray-100 flex justify-between items-center">
                 <div>
                     <h4 className="font-bold text-gray-800">{user.name}</h4>
@@ -104,7 +112,7 @@ const RepManager: React.FC = () => {
                 </button>
             </div>
         ))}
-        {users.filter(u => u.role === Role.REP).length === 0 && (
+        {!loading && users.filter(u => u.role === Role.REP).length === 0 && (
             <div className="col-span-3 text-center text-gray-500 py-8">
                 Nenhum representante cadastrado.
             </div>

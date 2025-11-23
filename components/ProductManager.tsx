@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProductDef, SizeGridType } from '../types';
 import { getProducts, addProduct, deleteProduct } from '../services/storageService';
-import { Trash, Plus, Shirt } from 'lucide-react';
+import { Trash, Plus, Loader2 } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
@@ -9,12 +9,20 @@ const ProductManager: React.FC = () => {
   const [newColor, setNewColor] = useState('');
   const [newGrid, setNewGrid] = useState<SizeGridType>(SizeGridType.ADULT);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    const data = await getProducts();
+    setProducts(data);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setProducts(getProducts());
+    fetchProducts();
   }, []);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -23,7 +31,6 @@ const ProductManager: React.FC = () => {
         return;
     }
 
-    // Uniqueness Check
     const exists = products.some(p => 
         p.reference.toUpperCase() === newRef.toUpperCase() && 
         p.color.toUpperCase() === newColor.toUpperCase()
@@ -34,22 +41,21 @@ const ProductManager: React.FC = () => {
         return;
     }
 
-    addProduct({
+    await addProduct({
         id: crypto.randomUUID(),
         reference: newRef.toUpperCase(),
         color: newColor.toUpperCase(),
         gridType: newGrid
     });
 
-    setProducts(getProducts());
-    setNewColor(''); // Keep Ref for faster entry
-    // setNewRef(''); 
+    await fetchProducts();
+    setNewColor(''); 
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja remover este produto do catálogo?')) {
-        deleteProduct(id);
-        setProducts(getProducts());
+        await deleteProduct(id);
+        await fetchProducts();
     }
   };
 
@@ -113,28 +119,31 @@ const ProductManager: React.FC = () => {
                 </tr>
             </thead>
             <tbody className="divide-y">
-                {products.length === 0 && (
+                {loading ? (
+                   <tr><td colSpan={4} className="p-6 text-center"><Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-500"/></td></tr>
+                ) : products.length === 0 ? (
                     <tr><td colSpan={4} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
+                ) : (
+                    products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => (
+                        <tr key={prod.id} className="hover:bg-gray-50">
+                            <td className="p-4 font-bold">{prod.reference}</td>
+                            <td className="p-4 uppercase">{prod.color}</td>
+                            <td className="p-4 text-sm text-gray-500">
+                                {prod.gridType === SizeGridType.ADULT && 'Normal'}
+                                {prod.gridType === SizeGridType.PLUS && 'Plus Size'}
+                            </td>
+                            <td className="p-4 text-right">
+                                <button 
+                                    onClick={() => handleDelete(prod.id)}
+                                    className="text-red-500 hover:bg-red-50 p-2 rounded transition"
+                                    title="Remover Produto"
+                                >
+                                    <Trash className="w-5 h-5" />
+                                </button>
+                            </td>
+                        </tr>
+                    ))
                 )}
-                {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => (
-                    <tr key={prod.id} className="hover:bg-gray-50">
-                        <td className="p-4 font-bold">{prod.reference}</td>
-                        <td className="p-4 uppercase">{prod.color}</td>
-                        <td className="p-4 text-sm text-gray-500">
-                            {prod.gridType === SizeGridType.ADULT && 'Normal'}
-                            {prod.gridType === SizeGridType.PLUS && 'Plus Size'}
-                        </td>
-                        <td className="p-4 text-right">
-                            <button 
-                                onClick={() => handleDelete(prod.id)}
-                                className="text-red-500 hover:bg-red-50 p-2 rounded transition"
-                                title="Remover Produto"
-                            >
-                                <Trash className="w-5 h-5" />
-                            </button>
-                        </td>
-                    </tr>
-                ))}
             </tbody>
         </table>
       </div>
