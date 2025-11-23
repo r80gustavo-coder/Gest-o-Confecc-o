@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { getUsers, setupDatabase, checkDatabaseHealth } from '../services/storageService';
-import { Lock, User as UserIcon, Loader2, Database, AlertCircle, PlayCircle, Settings, CheckCircle2, XCircle } from 'lucide-react';
+import { Lock, User as UserIcon, Loader2, Database, AlertCircle, PlayCircle, Settings, CheckCircle2, XCircle, Eye } from 'lucide-react';
 
 interface Props {
   onLogin: (user: User) => void;
@@ -19,6 +19,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   // Diagnóstico
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [debugUsers, setDebugUsers] = useState<User[] | null>(null);
 
   // Verifica o banco assim que carrega a página
   useEffect(() => {
@@ -46,6 +47,16 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       }
   };
 
+  const fetchDebugUsers = async () => {
+      try {
+          const users = await getUsers();
+          setDebugUsers(users);
+      } catch (e) {
+          setDebugUsers([]);
+          alert("Erro ao buscar usuários: " + JSON.stringify(e));
+      }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -60,6 +71,8 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         onLogin(validUser);
       } else {
         setError('Usuário ou senha incorretos.');
+        // Opcional: Buscar usuários para ajudar no debug se falhar
+        // fetchDebugUsers(); 
       }
     } catch (err: any) {
       console.error(err);
@@ -136,7 +149,10 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         {/* Painel de Diagnóstico */}
         {(showDiagnostics || error.includes("Erro de conexão")) && (
             <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200 text-sm animate-fade-in">
-                <h3 className="font-bold text-gray-700 mb-2 border-b pb-1">Diagnóstico do Sistema</h3>
+                <h3 className="font-bold text-gray-700 mb-2 border-b pb-1 flex justify-between">
+                    Diagnóstico do Sistema
+                    <button onClick={() => setShowDiagnostics(false)} className="text-gray-400 hover:text-gray-600"><XCircle className="w-4 h-4"/></button>
+                </h3>
                 
                 <div className="flex justify-between items-center mb-1">
                     <span>Arquivo .env carregado?</span>
@@ -144,7 +160,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 </div>
                 <div className="flex justify-between items-center mb-1">
                     <span>Status Conexão:</span>
-                    <span className={healthStatus?.status === 'ok' ? 'text-green-600' : 'text-red-600'}>
+                    <span className={healthStatus?.status === 'ok' ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
                         {healthStatus?.status === 'ok' ? 'Online' : healthStatus?.status === 'missing_tables' ? 'Sem Tabelas' : 'Erro'}
                     </span>
                 </div>
@@ -158,15 +174,40 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                         )}
                     </div>
                 )}
-                
-                <div className="mt-4 pt-2 border-t">
+
+                <div className="mt-4 flex gap-2">
+                     <button 
+                        onClick={fetchDebugUsers}
+                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-2 rounded text-xs font-bold flex items-center justify-center"
+                    >
+                        <Eye className="w-3 h-3 mr-1" /> Ver Usuários (Debug)
+                    </button>
                     <button 
                         onClick={() => setNeedsSetup(true)}
-                        className="text-blue-600 underline text-xs w-full text-center"
+                        className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-bold"
                     >
-                        Forçar Modo de Instalação (Criar Tabelas)
+                        Forçar Instalação
                     </button>
                 </div>
+
+                {debugUsers && (
+                    <div className="mt-3 border-t pt-2">
+                        <p className="text-xs font-bold mb-1">Usuários encontrados no banco:</p>
+                        {debugUsers.length === 0 ? (
+                            <p className="text-xs text-red-500">Nenhum usuário encontrado.</p>
+                        ) : (
+                            <ul className="text-xs text-gray-600 max-h-32 overflow-y-auto space-y-1">
+                                {debugUsers.map((u, i) => (
+                                    <li key={i} className="bg-white p-1 border rounded">
+                                        <strong>User:</strong> {u.username} <br/>
+                                        <strong>Senha:</strong> {u.password} <br/>
+                                        <strong>Role:</strong> {u.role}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                )}
             </div>
         )}
 
@@ -254,7 +295,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
         <div className="mt-8 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
           &copy; 2025 Gestão Confecção. <br/>
           {process.env.VITE_TURSO_DATABASE_URL ? (
-             <span className="text-green-500">Banco Configurado</span>
+             <span className="text-green-500">Ambiente Detectado</span>
           ) : (
              <span className="text-red-400">Ambiente não detectado</span>
           )}

@@ -17,15 +17,19 @@ const getEnv = (key: string) => {
   return '';
 };
 
-let url = getEnv('VITE_TURSO_DATABASE_URL');
-const authToken = getEnv('VITE_TURSO_AUTH_TOKEN');
+let url = getEnv('VITE_TURSO_DATABASE_URL') || "";
+let authToken = getEnv('VITE_TURSO_AUTH_TOKEN') || "";
+
+// --- SANITIZAÇÃO (Limpeza de espaços e quebras de linha) ---
+// Remove aspas extras que as vezes vem do .env mal formatado
+url = url.replace(/['"]/g, '').trim();
+authToken = authToken.replace(/['"]/g, '').trim();
 
 // --- CORREÇÃO AUTOMÁTICA DE URL ---
 if (url) {
   // 1. Forçar protocolo HTTPS (Navegadores não aceitam libsql://)
-  if (url.startsWith('libsql://')) {
-    url = url.replace('libsql://', 'https://');
-  }
+  // Substitui qualquer protocolo inicial por https://
+  url = url.replace(/^[a-zA-Z]+:\/\//, 'https://');
 
   // 2. Tentar limpar se o usuário colou o token junto com a URL (ex: ...turso.io.eyJhbG...)
   // O padrão Turso é algo-como-isso.turso.io
@@ -35,13 +39,11 @@ if (url) {
   }
 }
 
-if (!url) {
-  console.warn("VITE_TURSO_DATABASE_URL não encontrada. Verifique se o arquivo .env foi criado.");
-}
-
-console.log("Conectando ao Turso em:", url); // Log para debug
+// Debug log para o usuário ver no console do navegador (F12)
+console.log("[TURSO SETUP] URL Final:", url);
+console.log("[TURSO SETUP] Token Length:", authToken.length);
 
 export const turso = createClient({
   url: url || "https://db-placeholder.turso.io", 
-  authToken: authToken || "",
+  authToken: authToken,
 });

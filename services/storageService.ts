@@ -19,6 +19,7 @@ export const checkDatabaseHealth = async () => {
         return { status: 'ok' };
     } catch (error: any) {
         const msg = JSON.stringify(error) + (error.message || '');
+        console.error("[HEALTH CHECK ERROR]", error);
         
         if (msg.includes("no such table") || msg.includes("Table 'users' not found")) {
             return { status: 'missing_tables' };
@@ -35,7 +36,6 @@ export const setupDatabase = async () => {
     console.log("Iniciando configuração do banco...");
 
     // 1. Criar Tabela USERS
-    // Simplificamos a query para garantir compatibilidade
     await turso.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -97,12 +97,9 @@ export const setupDatabase = async () => {
 
     // 5. Inserir ADMIN se não existir
     try {
-      // Verifica se existe algum usuário
-      const checkUsers = await turso.execute("SELECT count(*) as count FROM users");
-      // @ts-ignore
-      const count = checkUsers.rows[0]?.count || checkUsers.rows[0]?.[0] || 0;
-
-      if (Number(count) === 0) {
+      const checkUsers = await turso.execute("SELECT * FROM users");
+      
+      if (checkUsers.rows.length === 0) {
         console.log("Criando usuário admin padrão...");
         await turso.execute({
           sql: "INSERT INTO users (id, name, username, password, role) VALUES (?, ?, ?, ?, ?)",
@@ -126,22 +123,38 @@ export const setupDatabase = async () => {
 // --- USERS ---
 export const getUsers = async (): Promise<User[]> => {
   try {
-    const result = await turso.execute("SELECT * FROM users");
-    
-    return result.rows.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      username: row.username,
-      password: row.password,
-      role: row.role as Role
-    }));
+    // Garantir a seleção explícita das colunas para evitar confusão na ordem
+    const result = await turso.execute("SELECT id, name, username, password, role FROM users");
+    console.log("Users loaded from DB:", result.rows.length, "rows"); 
+
+    return result.rows.map((row: any) => {
+        // Fallback robusto se o driver retornar array em vez de objeto
+        if (Array.isArray(row)) {
+            return {
+                id: row[0],
+                name: row[1],
+                username: row[2],
+                password: row[3],
+                role: row[4] as Role
+            };
+        }
+
+        // Se for objeto (padrão esperado)
+        return {
+            id: row.id,
+            name: row.name,
+            username: row.username,
+            password: row.password,
+            role: row.role as Role
+        };
+    });
   } catch (error) {
     console.error('Error fetching users:', error);
-    // Se o erro for "no such table", lançamos para o Login tratar
-    if (JSON.stringify(error).includes("no such table")) {
+    const msg = JSON.stringify(error);
+    if (msg.includes("no such table") || msg.includes("not found")) {
         throw new Error("TABLE_MISSING");
     }
-    return [];
+    throw error;
   }
 };
 
@@ -172,13 +185,22 @@ export const getProducts = async (): Promise<ProductDef[]> => {
   try {
     const result = await turso.execute("SELECT * FROM products");
     
-    // Map snake_case (DB) to camelCase (App)
-    return result.rows.map((p: any) => ({
-      id: p.id,
-      reference: p.reference,
-      color: p.color,
-      gridType: p.grid_type as SizeGridType
-    }));
+    return result.rows.map((p: any) => {
+        if (Array.isArray(p)) {
+             return {
+                 id: p[0],
+                 reference: p[1],
+                 color: p[2],
+                 gridType: p[3] as SizeGridType
+             };
+        }
+        return {
+            id: p.id,
+            reference: p.reference,
+            color: p.color,
+            gridType: p.grid_type as SizeGridType
+        };
+    });
   } catch (error) {
     console.error('Error fetching products:', error);
     return [];
@@ -220,14 +242,26 @@ export const getClients = async (repId?: string): Promise<Client[]> => {
 
     const result = await turso.execute({ sql, args });
 
-    return result.rows.map((c: any) => ({
-      id: c.id,
-      repId: c.rep_id,
-      name: c.name,
-      city: c.city,
-      neighborhood: c.neighborhood,
-      state: c.state
-    }));
+    return result.rows.map((c: any) => {
+        if(Array.isArray(c)) {
+            return {
+                id: c[0],
+                repId: c[1],
+                name: c[2],
+                city: c[3],
+                neighborhood: c[4],
+                state: c[5]
+            }
+        }
+        return {
+            id: c.id,
+            repId: c.rep_id,
+            name: c.name,
+            city: c.city,
+            neighborhood: c.neighborhood,
+            state: c.state
+        };
+    });
   } catch (error) {
     console.error('Error fetching clients:', error);
     return [];
@@ -251,30 +285,45 @@ export const getOrders = async (): Promise<Order[]> => {
     const result = await turso.execute("SELECT * FROM orders");
 
     return result.rows.map((o: any) => {
-      // Parse JSON items manually for SQLite
+      let itemsStr = '';
+      let id, displayId, repId, repName, clientId, clientName, clientCity, clientState, createdAt, deliveryDate, paymentMethod, status, totalPieces;
+      
+      if (Array.isArray(o)) {
+          // Mapeamento manual de colunas se for array
+          // Ordem: id, display_id, rep_id, rep_name, client_id, client_name, client_city, client_state, created_at, delivery_date, payment_method, status, items, total_pieces
+          id = o[0]; displayId = o[1]; repId = o[2]; repName = o[3]; clientId = o[4]; clientName = o[5]; 
+          clientCity = o[6]; clientState = o[7]; createdAt = o[8]; deliveryDate = o[9]; paymentMethod = o[10]; 
+          status = o[11]; itemsStr = o[12]; totalPieces = o[13];
+      } else {
+          id = o.id; displayId = o.display_id; repId = o.rep_id; repName = o.rep_name; clientId = o.client_id;
+          clientName = o.client_name; clientCity = o.client_city; clientState = o.client_state;
+          createdAt = o.created_at; deliveryDate = o.delivery_date; paymentMethod = o.payment_method;
+          status = o.status; itemsStr = o.items; totalPieces = o.total_pieces;
+      }
+
       let parsedItems = [];
       try {
-        parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
+        parsedItems = typeof itemsStr === 'string' ? JSON.parse(itemsStr) : itemsStr;
       } catch (e) {
         console.error("Erro parsing items JSON", e);
       }
 
       return {
-        id: o.id,
-        displayId: o.display_id,
-        repId: o.rep_id,
-        repName: o.rep_name,
-        clientId: o.client_id,
-        clientName: o.client_name,
-        clientCity: o.client_city,
-        clientState: o.client_state,
-        createdAt: o.created_at,
-        delivery_date: o.delivery_date, // Keeping for raw access if needed
-        deliveryDate: o.delivery_date, // Mapped for interface
-        paymentMethod: o.payment_method,
-        status: o.status as 'open' | 'printed',
+        id,
+        displayId,
+        repId,
+        repName,
+        clientId,
+        clientName,
+        clientCity,
+        clientState,
+        createdAt,
+        deliveryDate, // Mapped for interface
+        delivery_date: deliveryDate,
+        paymentMethod,
+        status: status as 'open' | 'printed',
         items: parsedItems,
-        totalPieces: o.total_pieces
+        totalPieces
       };
     });
   } catch (error) {
