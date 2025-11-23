@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { getUsers, setupDatabase } from '../services/storageService';
-import { Lock, User as UserIcon, Loader2, Database } from 'lucide-react';
+import { Lock, User as UserIcon, Loader2, Database, AlertCircle } from 'lucide-react';
 
 interface Props {
   onLogin: (user: User) => void;
@@ -13,12 +13,14 @@ const Login: React.FC<Props> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [setupMsg, setSetupMsg] = useState('');
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setSetupMsg('');
+    setNeedsSetup(false);
 
     try {
       const users = await getUsers();
@@ -27,27 +29,31 @@ const Login: React.FC<Props> = ({ onLogin }) => {
       if (validUser) {
         onLogin(validUser);
       } else {
-        setError('Credenciais inválidas. Tente novamente. Se for o primeiro acesso, certifique-se que o banco foi configurado.');
+        setError('Usuário ou senha incorretos.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Erro ao conectar com o banco de dados. Verifique sua conexão.');
+      if (err.message === "TABLE_MISSING" || JSON.stringify(err).includes("no such table")) {
+          setError('As tabelas do banco ainda não foram criadas.');
+          setNeedsSetup(true);
+      } else {
+          setError('Erro de conexão. Verifique suas chaves do Turso.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleSetupDatabase = async () => {
-    if (!confirm('Isso irá criar as tabelas necessárias no banco de dados Turso se elas não existirem. Deseja continuar?')) return;
-    
     setLoading(true);
-    setSetupMsg('Configurando banco...');
+    setSetupMsg('Criando tabelas e usuário admin...');
     try {
       const result = await setupDatabase();
       if (result.success) {
-        setSetupMsg('✅ Sucesso! Tente logar com: admin / 123456');
+        setSetupMsg(result.message);
+        setNeedsSetup(false);
       } else {
-        setError('Erro na configuração: ' + result.message);
+        setError('Erro: ' + result.message);
       }
     } catch (e) {
       setError('Falha crítica ao configurar banco.');
@@ -66,13 +72,19 @@ const Login: React.FC<Props> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-center">
+            <div className={`p-3 rounded-lg text-sm text-center flex flex-col items-center ${needsSetup ? 'bg-orange-50 text-orange-800' : 'bg-red-50 text-red-600'}`}>
+              <span className="flex items-center font-bold mb-1">
+                 <AlertCircle className="w-4 h-4 mr-2" /> Atenção
+              </span>
               {error}
+              {needsSetup && (
+                  <p className="mt-1 text-xs">Clique no botão abaixo para corrigir.</p>
+              )}
             </div>
           )}
 
           {setupMsg && (
-             <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm text-center font-bold">
+             <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm text-center font-bold border border-green-200">
                {setupMsg}
              </div>
           )}
@@ -87,7 +99,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Digite seu usuário"
+                placeholder="admin"
               />
             </div>
           </div>
@@ -102,7 +114,7 @@ const Login: React.FC<Props> = ({ onLogin }) => {
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="123456"
               />
             </div>
           </div>
@@ -116,13 +128,14 @@ const Login: React.FC<Props> = ({ onLogin }) => {
           </button>
         </form>
         
-        <div className="mt-8 pt-6 border-t border-gray-100">
+        <div className={`mt-8 pt-6 border-t border-gray-100 ${needsSetup ? 'animate-pulse' : ''}`}>
           <button 
             type="button"
             onClick={handleSetupDatabase}
-            className="w-full flex items-center justify-center text-xs text-gray-500 hover:text-blue-600 transition"
+            className={`w-full flex items-center justify-center text-xs transition p-2 rounded ${needsSetup ? 'bg-orange-100 text-orange-800 font-bold border border-orange-300' : 'text-gray-500 hover:text-blue-600 hover:bg-gray-50'}`}
           >
-            <Database className="w-3 h-3 mr-1" /> Configurar Banco de Dados (Primeiro Acesso)
+            <Database className="w-3 h-3 mr-2" /> 
+            {needsSetup ? 'CLIQUE AQUI PARA CRIAR AS TABELAS' : 'Configurar Banco de Dados (Primeiro Acesso)'}
           </button>
         </div>
 

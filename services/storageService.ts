@@ -9,26 +9,37 @@ export const initializeStorage = async () => {
 // --- SETUP DATABASE (Criação de Tabelas) ---
 export const setupDatabase = async () => {
   try {
-    const queries = [
-      // Tabela Users
-      `CREATE TABLE IF NOT EXISTS users (
+    console.log("Iniciando configuração do banco...");
+
+    // 1. Criar Tabela USERS
+    // Simplificamos a query para garantir compatibilidade
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         username TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('admin', 'rep')),
+        role TEXT NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )`,
-      // Tabela Products
-      `CREATE TABLE IF NOT EXISTS products (
+      )
+    `);
+    console.log("Tabela 'users' verificada.");
+
+    // 2. Criar Tabela PRODUCTS
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS products (
         id TEXT PRIMARY KEY,
         reference TEXT NOT NULL,
         color TEXT NOT NULL,
         grid_type TEXT NOT NULL,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )`,
-      // Tabela Clients
-      `CREATE TABLE IF NOT EXISTS clients (
+      )
+    `);
+    console.log("Tabela 'products' verificada.");
+
+    // 3. Criar Tabela CLIENTS
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS clients (
         id TEXT PRIMARY KEY,
         rep_id TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -36,9 +47,13 @@ export const setupDatabase = async () => {
         neighborhood TEXT,
         state TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )`,
-      // Tabela Orders
-      `CREATE TABLE IF NOT EXISTS orders (
+      )
+    `);
+    console.log("Tabela 'clients' verificada.");
+
+    // 4. Criar Tabela ORDERS
+    await turso.execute(`
+      CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
         display_id INTEGER,
         rep_id TEXT NOT NULL,
@@ -53,30 +68,35 @@ export const setupDatabase = async () => {
         status TEXT DEFAULT 'open',
         items TEXT NOT NULL,
         total_pieces INTEGER NOT NULL
-      )`
-    ];
+      )
+    `);
+    console.log("Tabela 'orders' verificada.");
 
-    // Executar criação de tabelas
-    for (const sql of queries) {
-      await turso.execute(sql);
-    }
-
-    // Criar usuário Admin padrão se não existir
+    // 5. Inserir ADMIN se não existir
     try {
-      await turso.execute({
-        sql: "INSERT INTO users (id, name, username, password, role) VALUES (?, ?, ?, ?, ?)",
-        args: ['admin_init_01', 'Administrador', 'admin', '123456', 'admin']
-      });
-      console.log("Usuário admin criado.");
+      // Verifica se existe algum usuário
+      const checkUsers = await turso.execute("SELECT count(*) as count FROM users");
+      // @ts-ignore
+      const count = checkUsers.rows[0]?.count || checkUsers.rows[0]?.[0] || 0;
+
+      if (Number(count) === 0) {
+        console.log("Criando usuário admin padrão...");
+        await turso.execute({
+          sql: "INSERT INTO users (id, name, username, password, role) VALUES (?, ?, ?, ?, ?)",
+          args: ['admin_init_01', 'Administrador', 'admin', '123456', 'admin']
+        });
+        return { success: true, message: "Banco configurado! Usuário: admin / Senha: 123456" };
+      } else {
+        return { success: true, message: "Tabelas verificadas. Usuários já existem." };
+      }
     } catch (e) {
-      // Ignora erro se usuário já existir (violação de UNIQUE)
-      console.log("Usuário admin já existe ou erro ao criar:", e);
+      console.error("Erro ao criar admin:", e);
+      return { success: true, message: "Tabelas criadas, mas erro ao verificar admin." };
     }
 
-    return { success: true, message: "Banco de dados configurado com sucesso!" };
   } catch (error: any) {
-    console.error("Erro ao configurar banco:", error);
-    return { success: false, message: error.message || "Erro desconhecido" };
+    console.error("Erro crítico ao configurar banco:", error);
+    return { success: false, message: error.message || "Erro desconhecido ao criar tabelas." };
   }
 };
 
@@ -94,6 +114,10 @@ export const getUsers = async (): Promise<User[]> => {
     }));
   } catch (error) {
     console.error('Error fetching users:', error);
+    // Se o erro for "no such table", lançamos para o Login tratar
+    if (JSON.stringify(error).includes("no such table")) {
+        throw new Error("TABLE_MISSING");
+    }
     return [];
   }
 };
@@ -222,7 +246,8 @@ export const getOrders = async (): Promise<Order[]> => {
         clientCity: o.client_city,
         clientState: o.client_state,
         createdAt: o.created_at,
-        deliveryDate: o.delivery_date,
+        delivery_date: o.delivery_date, // Keeping for raw access if needed
+        deliveryDate: o.delivery_date, // Mapped for interface
         paymentMethod: o.payment_method,
         status: o.status as 'open' | 'printed',
         items: parsedItems,
@@ -241,7 +266,6 @@ export const addOrder = async (order: Omit<Order, 'displayId'>) => {
     const itemsJson = JSON.stringify(order.items);
     
     // Calculate next display_id (Manual auto-increment logic for SQLite)
-    // We calculate it inside the INSERT using a subquery to be atomic
     const sql = `
       INSERT INTO orders (
         id, display_id, rep_id, rep_name, client_id, client_name, 
