@@ -9,15 +9,23 @@ export const initializeStorage = async () => {
 // --- HEALTH CHECK ---
 export const checkDatabaseHealth = async () => {
     try {
+        // Verifica se a URL do Turso está configurada no client
+        if (!process.env.VITE_TURSO_DATABASE_URL) {
+            return { status: 'error', message: 'Variável VITE_TURSO_DATABASE_URL não encontrada no .env' };
+        }
+
         // Tenta fazer uma query simples na tabela de usuários
         await turso.execute("SELECT count(*) FROM users LIMIT 1");
         return { status: 'ok' };
     } catch (error: any) {
-        const msg = JSON.stringify(error);
-        if (msg.includes("no such table") || error.message?.includes("no such table")) {
+        const msg = JSON.stringify(error) + (error.message || '');
+        
+        if (msg.includes("no such table") || msg.includes("Table 'users' not found")) {
             return { status: 'missing_tables' };
         }
-        return { status: 'error', message: error.message };
+        
+        // Retorna o erro real para debug
+        return { status: 'error', message: error.message || "Erro desconhecido na conexão com Turso" };
     }
 };
 
