@@ -6,6 +6,21 @@ export const initializeStorage = async () => {
   // Opcional: verificação de saúde da conexão
 };
 
+// --- HEALTH CHECK ---
+export const checkDatabaseHealth = async () => {
+    try {
+        // Tenta fazer uma query simples na tabela de usuários
+        await turso.execute("SELECT count(*) FROM users LIMIT 1");
+        return { status: 'ok' };
+    } catch (error: any) {
+        const msg = JSON.stringify(error);
+        if (msg.includes("no such table") || error.message?.includes("no such table")) {
+            return { status: 'missing_tables' };
+        }
+        return { status: 'error', message: error.message };
+    }
+};
+
 // --- SETUP DATABASE (Criação de Tabelas) ---
 export const setupDatabase = async () => {
   try {
