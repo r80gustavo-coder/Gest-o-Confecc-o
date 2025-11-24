@@ -23,11 +23,17 @@ const getEnvVar = (key: string, viteKey: string) => {
 };
 
 // Tenta buscar URL e KEY em diferentes padrões de nomenclatura
-const supabaseUrl = getEnvVar('REACT_APP_SUPABASE_URL', 'VITE_SUPABASE_URL') || getEnvVar('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL');
-const supabaseKey = getEnvVar('REACT_APP_SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY') || getEnvVar('SUPABASE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
+let supabaseUrl = getEnvVar('REACT_APP_SUPABASE_URL', 'VITE_SUPABASE_URL') || getEnvVar('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL');
+let supabaseKey = getEnvVar('REACT_APP_SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY') || getEnvVar('SUPABASE_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
+// PREVENÇÃO DE TELA BRANCA:
+// O Supabase lança um erro fatal se a URL for vazia no construtor.
+// Se não houver credenciais, usamos valores fictícios para permitir que o React carregue
+// e exiba a mensagem de erro na UI (Login) em vez de uma tela branca.
 if (!supabaseUrl || !supabaseKey) {
-  console.warn("ATENÇÃO: Credenciais do Supabase não encontradas. Verifique as variáveis de ambiente no Vercel (Settings > Environment Variables).");
+  console.warn("⚠️ Credenciais do Supabase não encontradas! O app carregará em modo seguro, mas a conexão falhará.");
+  if (!supabaseUrl) supabaseUrl = 'https://placeholder.supabase.co';
+  if (!supabaseKey) supabaseKey = 'placeholder-key';
 }
 
-export const supabase = createClient(supabaseUrl || '', supabaseKey || '');
+export const supabase = createClient(supabaseUrl, supabaseKey);

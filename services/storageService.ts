@@ -4,7 +4,11 @@ import { supabase } from './supabaseClient';
 // --- USERS ---
 export const getUsers = async (): Promise<User[]> => {
   const { data, error } = await supabase.from('users').select('*');
-  if (error) { console.error(error); return []; }
+  if (error) { 
+    console.error("Erro ao buscar usuários:", error); 
+    // Lança o erro para que o componente de Login possa exibir "Erro de conexão"
+    throw error; 
+  }
   return data as User[];
 };
 
@@ -60,7 +64,7 @@ export const updateClient = async (updatedClient: Client): Promise<void> => {
 };
 
 export const deleteClient = async (id: string): Promise<void> => {
-  // Agora lança o erro para ser capturado no componente
+  // Agora lança o erro para ser capturado no componente (ex: chave estrangeira)
   const { error } = await supabase.from('clients').delete().eq('id', id);
   if (error) throw error; 
 };
