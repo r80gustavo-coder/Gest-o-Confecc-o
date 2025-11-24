@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, getClients, addOrder } from '../services/storageService';
-import { Plus, Trash, Save, Edit2 } from 'lucide-react';
+import { Plus, Trash, Save, Edit2, Loader2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -39,12 +39,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
   useEffect(() => {
     const loadData = async () => {
-        const [prodData, clientData] = await Promise.all([
-            getProducts(),
-            getClients(user.id)
-        ]);
-        setProducts(prodData);
-        setClients(clientData);
+        setLoading(true);
+        const [p, c] = await Promise.all([getProducts(), getClients(user.id)]);
+        setProducts(p);
+        setClients(c);
+        setLoading(false);
     };
     loadData();
   }, [user.id]);
@@ -172,6 +171,10 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
   // Unique list of references for datalist
   const uniqueRefs = [...new Set(products.map(p => p.reference))];
+
+  if (loading && products.length === 0) {
+      return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
+  }
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm">
@@ -394,11 +397,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       <div className="mt-6 flex justify-end">
         <button 
           onClick={handleSaveOrder}
-          disabled={loading || items.length === 0 || !selectedClientId || editingIndex !== null}
+          disabled={items.length === 0 || !selectedClientId || editingIndex !== null || loading}
           className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 shadow-md flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Save className="w-5 h-5 mr-2" />
-          {editingIndex !== null ? 'Termine a edição antes de salvar' : (loading ? 'Salvando...' : 'Finalizar Pedido')}
+          {loading ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+          {editingIndex !== null ? 'Termine a edição antes de salvar' : 'Finalizar Pedido'}
         </button>
       </div>
     </div>

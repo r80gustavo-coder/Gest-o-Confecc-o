@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
 import { getOrders, getClients } from '../services/storageService';
-import { Package, Clock, CheckCircle, Search, Eye, X } from 'lucide-react';
+import { Package, Clock, CheckCircle, Search, Eye, X, Loader2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -19,25 +19,21 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
 
   useEffect(() => {
-    const loadData = async () => {
+    const fetchData = async () => {
         setLoading(true);
-        const [allOrders, allClients] = await Promise.all([
-            getOrders(),
-            getClients(user.id)
-        ]);
-        
-        setClients(allClients);
-        setOrders(allOrders.filter(o => o.repId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        const [o, c] = await Promise.all([getOrders(), getClients(user.id)]);
+        setClients(c);
+        setOrders(o.filter(o => o.repId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
         setLoading(false);
     };
-    loadData();
+    fetchData();
   }, [user.id]);
 
   const filteredOrders = selectedClientId 
     ? orders.filter(o => o.clientId === selectedClientId)
     : orders;
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Carregando pedidos...</div>;
+  if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6">

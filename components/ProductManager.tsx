@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProductDef, SizeGridType } from '../types';
 import { getProducts, addProduct, deleteProduct } from '../services/storageService';
-import { Trash, Plus, Shirt } from 'lucide-react';
+import { Trash, Plus, Shirt, Loader2 } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
@@ -11,7 +11,7 @@ const ProductManager: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const fetchProducts = async () => {
+  const fetchData = async () => {
     setLoading(true);
     const data = await getProducts();
     setProducts(data);
@@ -19,7 +19,7 @@ const ProductManager: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchData();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -31,7 +31,7 @@ const ProductManager: React.FC = () => {
         return;
     }
 
-    // Uniqueness Check locally to save a request, though backend checks too
+    // Uniqueness Check
     const exists = products.some(p => 
         p.reference.toUpperCase() === newRef.toUpperCase() && 
         p.color.toUpperCase() === newColor.toUpperCase()
@@ -41,8 +41,7 @@ const ProductManager: React.FC = () => {
         setError('Esta combinação de Referência e Cor já existe no catálogo.');
         return;
     }
-    
-    setLoading(true);
+
     await addProduct({
         id: crypto.randomUUID(),
         reference: newRef.toUpperCase(),
@@ -50,23 +49,24 @@ const ProductManager: React.FC = () => {
         gridType: newGrid
     });
 
-    await fetchProducts();
+    await fetchData();
     setNewColor(''); // Keep Ref for faster entry
-    setLoading(false);
+    // setNewRef(''); 
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja remover este produto do catálogo?')) {
-        setLoading(true);
         await deleteProduct(id);
-        await fetchProducts();
-        setLoading(false);
+        await fetchData();
     }
   };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">Catálogo de Produtos</h2>
+      <div className="flex items-center gap-2">
+         <h2 className="text-2xl font-bold text-gray-800">Catálogo de Produtos</h2>
+         {loading && <Loader2 className="animate-spin text-blue-600" />}
+      </div>
       
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">Cadastrar Novo Produto</h3>
@@ -81,6 +81,7 @@ const ProductManager: React.FC = () => {
                 value={newRef}
                 onChange={(e) => setNewRef(e.target.value)}
                 placeholder="EX: CAMISA-01"
+                disabled={loading}
             />
           </div>
           <div>
@@ -91,6 +92,7 @@ const ProductManager: React.FC = () => {
                 value={newColor}
                 onChange={(e) => setNewColor(e.target.value)}
                 placeholder="EX: AZUL MARINHO"
+                disabled={loading}
             />
           </div>
           <div>
@@ -99,6 +101,7 @@ const ProductManager: React.FC = () => {
                 className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500"
                 value={newGrid}
                 onChange={(e) => setNewGrid(e.target.value as SizeGridType)}
+                disabled={loading}
             >
                 <option value={SizeGridType.ADULT}>Normal (P, M, G, GG)</option>
                 <option value={SizeGridType.PLUS}>Plus Size (G1, G2, G3)</option>
@@ -107,9 +110,9 @@ const ProductManager: React.FC = () => {
           <button 
             type="submit"
             disabled={loading}
-            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center h-[42px] disabled:opacity-50"
+            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center h-[42px]"
           >
-            <Plus className="w-5 h-5 mr-2" /> {loading ? '...' : 'Adicionar'}
+            <Plus className="w-5 h-5 mr-2" /> Adicionar
           </button>
         </form>
       </div>
@@ -125,8 +128,8 @@ const ProductManager: React.FC = () => {
                 </tr>
             </thead>
             <tbody className="divide-y">
-                {products.length === 0 && (
-                    <tr><td colSpan={4} className="p-6 text-center text-gray-400">{loading ? 'Carregando...' : 'Nenhum produto cadastrado.'}</td></tr>
+                {products.length === 0 && !loading && (
+                    <tr><td colSpan={4} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
                 )}
                 {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => (
                     <tr key={prod.id} className="hover:bg-gray-50">

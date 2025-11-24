@@ -9,23 +9,18 @@ import ClientManager from './components/ClientManager';
 import RepOrderForm from './components/RepOrderForm';
 import RepOrderList from './components/RepOrderList';
 import { User, Role } from './types';
-import { initializeStorage } from './services/storageService';
+import { getUsers, initializeStorage } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const init = async () => {
-       initializeStorage(); // Placeholder for now
-       const savedUser = localStorage.getItem('current_user');
-       if (savedUser) {
-         setUser(JSON.parse(savedUser));
-       }
-       setLoading(false);
-    };
-    init();
+    initializeStorage();
+    const savedUser = localStorage.getItem('current_user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
   }, []);
 
   const handleLogin = (u: User) => {
@@ -39,8 +34,6 @@ const App: React.FC = () => {
     localStorage.removeItem('current_user');
     setActiveTab('dashboard');
   };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
 
   if (!user) {
     return <Login onLogin={handleLogin} />;

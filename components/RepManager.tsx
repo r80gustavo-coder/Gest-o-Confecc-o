@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
 import { getUsers, addUser, deleteUser } from '../services/storageService';
-import { Trash, Plus, UserPlus } from 'lucide-react';
+import { Trash, Plus, UserPlus, Shield, Loader2 } from 'lucide-react';
 
 const RepManager: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -10,7 +10,7 @@ const RepManager: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const fetchUsers = async () => {
+  const fetchData = async () => {
     setLoading(true);
     const data = await getUsers();
     setUsers(data);
@@ -18,7 +18,7 @@ const RepManager: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchData();
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -27,6 +27,7 @@ const RepManager: React.FC = () => {
         alert('Este usuário já existe.');
         return;
     }
+
     setLoading(true);
     await addUser({
         id: crypto.randomUUID(),
@@ -35,25 +36,26 @@ const RepManager: React.FC = () => {
         password,
         role: Role.REP
     });
-    await fetchUsers();
+    await fetchData();
     setName('');
     setUsername('');
     setPassword('');
-    setLoading(false);
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja remover este representante?')) {
         setLoading(true);
         await deleteUser(id);
-        await fetchUsers();
-        setLoading(false);
+        await fetchData();
     }
   };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">Gerenciar Representantes</h2>
+      <div className="flex items-center gap-2">
+         <h2 className="text-2xl font-bold text-gray-800">Gerenciar Representantes</h2>
+         {loading && <Loader2 className="animate-spin text-blue-600" />}
+      </div>
 
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center">
@@ -68,6 +70,7 @@ const RepManager: React.FC = () => {
                 className="w-full border p-2 rounded"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                disabled={loading}
             />
           </div>
           <div>
@@ -78,6 +81,7 @@ const RepManager: React.FC = () => {
                 className="w-full border p-2 rounded"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
             />
           </div>
           <div>
@@ -88,14 +92,15 @@ const RepManager: React.FC = () => {
                 className="w-full border p-2 rounded"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
             />
           </div>
           <button 
             type="submit"
             disabled={loading}
-            className="bg-green-600 text-white p-2 rounded hover:bg-green-700 font-medium flex justify-center items-center h-[42px] disabled:opacity-50"
+            className="bg-green-600 text-white p-2 rounded hover:bg-green-700 font-medium flex justify-center items-center h-[42px]"
           >
-            <Plus className="w-5 h-5 mr-2" /> {loading ? '...' : 'Cadastrar'}
+            <Plus className="w-5 h-5 mr-2" /> Cadastrar
           </button>
         </form>
       </div>
@@ -116,9 +121,9 @@ const RepManager: React.FC = () => {
                 </button>
             </div>
         ))}
-        {users.filter(u => u.role === Role.REP).length === 0 && (
+        {users.filter(u => u.role === Role.REP).length === 0 && !loading && (
             <div className="col-span-3 text-center text-gray-500 py-8">
-                {loading ? 'Carregando...' : 'Nenhum representante cadastrado.'}
+                Nenhum representante cadastrado.
             </div>
         )}
       </div>

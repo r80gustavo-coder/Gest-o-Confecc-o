@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Client } from '../types';
-import { getClients, addClient } from '../services/storageService';
-import { Plus, MapPin, Store } from 'lucide-react';
+import { getClients, addClient, updateClient, deleteClient } from '../services/storageService';
+import { Plus, MapPin, Store, Edit2, Trash, Save, X, Loader2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -9,10 +9,12 @@ interface Props {
 
 const ClientManager: React.FC<Props> = ({ user }) => {
   const [clients, setClients] = useState<Client[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  
   const [form, setForm] = useState({
     name: '', city: '', neighborhood: '', state: ''
   });
-  const [loading, setLoading] = useState(false);
 
   const fetchClients = async () => {
     setLoading(true);
@@ -28,67 +30,158 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await addClient({
-        id: crypto.randomUUID(),
-        repId: user.id,
-        ...form
+    
+    try {
+      if (editingId) {
+          // Update existing
+          await updateClient({
+              id: editingId,
+              repId: user.id,
+              ...form
+          });
+          setEditingId(null);
+      } else {
+          // Create new
+          await addClient({
+              id: crypto.randomUUID(),
+              repId: user.id,
+              ...form
+          });
+      }
+      await fetchClients();
+      setForm({ name: '', city: '', neighborhood: '', state: '' });
+    } catch (error) {
+      console.error("Erro ao salvar:", error);
+      alert("Erro ao salvar cliente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent, client: Client) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setForm({
+        name: client.name,
+        city: client.city,
+        neighborhood: client.neighborhood,
+        state: client.state
     });
-    await fetchClients();
+    setEditingId(client.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation(); // CRITICAL: Stop event bubbling
+    
+    if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
+        setLoading(true);
+        try {
+            await deleteClient(id);
+            if (editingId === id) {
+              handleCancel();
+            }
+            await fetchClients();
+        } catch (error) {
+            console.error("Erro ao deletar:", error);
+            alert("Não foi possível excluir o cliente.");
+        } finally {
+            setLoading(false);
+        }
+    }
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
     setForm({ name: '', city: '', neighborhood: '', state: '' });
-    setLoading(false);
   };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">Meus Clientes</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-800">Meus Clientes</h2>
+        {loading && <Loader2 className="animate-spin text-blue-600" />}
+      </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold mb-4 flex items-center">
-            <Store className="w-5 h-5 mr-2 text-blue-600" /> Cadastrar Novo Cliente
-        </h3>
+      <div className={`p-6 rounded-lg shadow-sm border transition-colors ${editingId ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'}`}>
+        <div className="flex justify-between items-center mb-4">
+            <h3 className={`text-lg font-semibold flex items-center ${editingId ? 'text-orange-800' : 'text-gray-700'}`}>
+                {editingId ? (
+                    <><Edit2 className="w-5 h-5 mr-2" /> Editando Cliente</>
+                ) : (
+                    <><Store className="w-5 h-5 mr-2 text-blue-600" /> Cadastrar Novo Cliente</>
+                )}
+            </h3>
+            {editingId && (
+                <button onClick={handleCancel} type="button" className="text-sm text-gray-500 hover:text-gray-700 flex items-center">
+                    <X className="w-4 h-4 mr-1" /> Cancelar Edição
+                </button>
+            )}
+        </div>
+
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Loja / Cliente</label>
                 <input 
                     required
-                    className="w-full border p-2 rounded"
+                    className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                     value={form.name}
                     onChange={e => setForm({...form, name: e.target.value})}
                     placeholder="Ex: Boutique Elegance"
+                    disabled={loading}
                 />
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
                 <input 
                     required
-                    className="w-full border p-2 rounded"
+                    className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                     value={form.city}
                     onChange={e => setForm({...form, city: e.target.value})}
+                    disabled={loading}
                 />
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Estado (UF)</label>
                 <input 
                     required
-                    className="w-full border p-2 rounded uppercase"
+                    className="w-full border p-2 rounded uppercase focus:ring-2 focus:ring-blue-500 outline-none"
                     maxLength={2}
                     value={form.state}
                     onChange={e => setForm({...form, state: e.target.value})}
                     placeholder="SP"
+                    disabled={loading}
                 />
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
                 <input 
                     required
-                    className="w-full border p-2 rounded"
+                    className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
                     value={form.neighborhood}
                     onChange={e => setForm({...form, neighborhood: e.target.value})}
+                    disabled={loading}
                 />
             </div>
-            <div className="md:col-span-2 flex justify-end mt-2">
-                <button type="submit" disabled={loading} className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center disabled:opacity-50">
-                    <Plus className="w-4 h-4 mr-2" /> {loading ? 'Salvando...' : 'Salvar Cliente'}
+            <div className="md:col-span-2 flex justify-end mt-2 gap-2">
+                {editingId && (
+                    <button 
+                        type="button" 
+                        onClick={handleCancel}
+                        disabled={loading}
+                        className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300"
+                    >
+                        Cancelar
+                    </button>
+                )}
+                <button 
+                    type="submit" 
+                    disabled={loading}
+                    className={`${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'} text-white px-6 py-2 rounded flex items-center shadow-sm transition disabled:opacity-50`}
+                >
+                    {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : (editingId ? <Save className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />)} 
+                    {editingId ? 'Salvar Alterações' : 'Salvar Cliente'}
                 </button>
             </div>
         </form>
@@ -96,18 +189,40 @@ const ClientManager: React.FC<Props> = ({ user }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
          {clients.map(client => (
-             <div key={client.id} className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-                 <h4 className="font-bold text-lg text-gray-800">{client.name}</h4>
-                 <div className="flex items-center text-gray-500 mt-2">
-                     <MapPin className="w-4 h-4 mr-1" />
-                     <span className="text-sm">{client.city} - {client.state}</span>
+             <div key={client.id} className={`bg-white p-4 rounded-lg shadow border-l-4 group relative ${editingId === client.id ? 'border-orange-400 bg-orange-50' : 'border-blue-500'}`}>
+                 <div className="flex justify-between items-start">
+                    <div>
+                        <h4 className="font-bold text-lg text-gray-800">{client.name}</h4>
+                        <div className="flex items-center text-gray-500 mt-2">
+                            <MapPin className="w-4 h-4 mr-1" />
+                            <span className="text-sm">{client.city} - {client.state}</span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">{client.neighborhood}</p>
+                    </div>
+                    <div className="flex gap-1">
+                        <button 
+                            type="button"
+                            onClick={(e) => handleEdit(e, client)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-full z-10"
+                            title="Editar"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={(e) => handleDelete(e, client.id)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full z-10"
+                            title="Excluir"
+                        >
+                            <Trash className="w-4 h-4" />
+                        </button>
+                    </div>
                  </div>
-                 <p className="text-xs text-gray-400 mt-1">{client.neighborhood}</p>
              </div>
          ))}
-         {clients.length === 0 && (
+         {!loading && clients.length === 0 && (
              <div className="col-span-3 text-center text-gray-400 py-10">
-                 {loading ? 'Carregando...' : 'Você ainda não tem clientes cadastrados.'}
+                 Você ainda não tem clientes cadastrados.
              </div>
          )}
       </div>

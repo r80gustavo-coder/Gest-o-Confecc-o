@@ -3,7 +3,7 @@ import { Order } from '../types';
 import { getOrders } from '../services/storageService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import { generateSalesAnalysis } from '../services/geminiService';
-import { Sparkles, RefreshCcw, TrendingUp, Users, ShoppingBag, Package, Calendar } from 'lucide-react';
+import { Sparkles, RefreshCcw, TrendingUp, Users, ShoppingBag, Package, Calendar, Loader2 } from 'lucide-react';
 
 interface Props {
   onNavigate: (tab: string) => void;
@@ -13,13 +13,13 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<string>("");
   const [loadingAi, setLoadingAi] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
 
   const fetchData = async () => {
-    setLoading(true);
+    setLoadingData(true);
     const data = await getOrders();
     setOrders(data);
-    setLoading(false);
+    setLoadingData(false);
   };
 
   useEffect(() => {
@@ -27,6 +27,7 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
   }, []);
 
   // --- ANALYTICS CALCULATIONS ---
+
   // 1. Basic KPIs
   const totalOrders = orders.length;
   const totalPieces = orders.reduce((acc, curr) => acc + curr.totalPieces, 0);
@@ -36,9 +37,10 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
   // 2. Rep Performance (Ranking)
   const repPerfMap: Record<string, { orders: number; pieces: number }> = {};
   orders.forEach(o => {
-    if (!repPerfMap[o.repName]) repPerfMap[o.repName] = { orders: 0, pieces: 0 };
-    repPerfMap[o.repName].orders += 1;
-    repPerfMap[o.repName].pieces += o.totalPieces;
+    const repName = o.repName || 'Desconhecido';
+    if (!repPerfMap[repName]) repPerfMap[repName] = { orders: 0, pieces: 0 };
+    repPerfMap[repName].orders += 1;
+    repPerfMap[repName].pieces += o.totalPieces;
   });
 
   const repRankingData = Object.keys(repPerfMap)
@@ -70,7 +72,9 @@ const AdminDashboard: React.FC<Props> = ({ onNavigate }) => {
     setLoadingAi(false);
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">Carregando dados...</div>;
+  if (loadingData) {
+    return <div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-blue-600 w-8 h-8" /></div>
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
