@@ -6,10 +6,9 @@ export const getUsers = async (): Promise<User[]> => {
   const { data, error } = await supabase.from('users').select('*');
   if (error) { 
     console.error("Erro ao buscar usuários:", error); 
-    // Lança o erro para que o componente de Login possa exibir "Erro de conexão"
     throw error; 
   }
-  return data as User[];
+  return (data || []) as User[];
 };
 
 export const addUser = async (user: User): Promise<void> => {
@@ -25,8 +24,11 @@ export const deleteUser = async (id: string): Promise<void> => {
 // --- PRODUCTS ---
 export const getProducts = async (): Promise<ProductDef[]> => {
   const { data, error } = await supabase.from('products').select('*');
-  if (error) { console.error(error); return []; }
-  return data as ProductDef[];
+  if (error) { 
+    console.error(error); 
+    return []; // Retorna array vazio em caso de erro para não quebrar a UI
+  }
+  return (data || []) as ProductDef[];
 };
 
 export const addProduct = async (prod: ProductDef): Promise<void> => {
@@ -46,8 +48,11 @@ export const getClients = async (repId?: string): Promise<Client[]> => {
     query = query.eq('repId', repId);
   }
   const { data, error } = await query;
-  if (error) { console.error(error); return []; }
-  return data as Client[];
+  if (error) { 
+    console.error(error); 
+    return []; 
+  }
+  return (data || []) as Client[];
 };
 
 export const addClient = async (client: Client): Promise<void> => {
@@ -64,7 +69,6 @@ export const updateClient = async (updatedClient: Client): Promise<void> => {
 };
 
 export const deleteClient = async (id: string): Promise<void> => {
-  // Agora lança o erro para ser capturado no componente (ex: chave estrangeira)
   const { error } = await supabase.from('clients').delete().eq('id', id);
   if (error) throw error; 
 };
@@ -72,28 +76,28 @@ export const deleteClient = async (id: string): Promise<void> => {
 // --- ORDERS ---
 export const getOrders = async (): Promise<Order[]> => {
   const { data, error } = await supabase.from('orders').select('*');
-  if (error) { console.error(error); return []; }
-  return data as Order[];
+  if (error) { 
+    console.error("Erro ao buscar pedidos:", error); 
+    return []; // Importante: retorna array vazio se falhar ou se tabela não existir
+  }
+  return (data || []) as Order[];
 };
 
 export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order | null> => {
   let newSeq = 1000;
 
   try {
-    // Tenta buscar a sequência. Se a tabela app_config não existir, cairá no catch.
     const { data: seqData, error: seqError } = await supabase.from('app_config').select('value').eq('key', 'order_seq').maybeSingle();
     
     if (!seqError) {
       const currentSeq = seqData?.value || 1000;
       newSeq = currentSeq + 1;
-      // Atualiza Seq (Optimistic)
       await supabase.from('app_config').upsert({ key: 'order_seq', value: newSeq });
     } else {
-        // Fallback simples se app_config não existir: usa timestamp curto
         newSeq = Math.floor(Date.now() / 1000) % 100000;
     }
   } catch (err) {
-    console.warn("Tabela app_config não encontrada ou erro de permissão. Usando ID baseado em timestamp.");
+    console.warn("Tabela app_config não encontrada. Usando ID baseado em timestamp.");
     newSeq = Math.floor(Date.now() / 1000) % 100000;
   }
 

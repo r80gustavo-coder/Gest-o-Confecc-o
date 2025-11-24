@@ -9,7 +9,7 @@ import ClientManager from './components/ClientManager';
 import RepOrderForm from './components/RepOrderForm';
 import RepOrderList from './components/RepOrderList';
 import { User, Role } from './types';
-import { getUsers, initializeStorage } from './services/storageService';
+import { initializeStorage } from './services/storageService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -19,7 +19,18 @@ const App: React.FC = () => {
     initializeStorage();
     const savedUser = localStorage.getItem('current_user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        if (parsedUser && parsedUser.id && parsedUser.role) {
+            setUser(parsedUser);
+        } else {
+            // Dados inválidos
+            localStorage.removeItem('current_user');
+        }
+      } catch (e) {
+        console.error("Erro ao ler usuário salvo:", e);
+        localStorage.removeItem('current_user');
+      }
     }
   }, []);
 
