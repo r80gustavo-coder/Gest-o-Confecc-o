@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Client } from '../types';
 import { getClients, addClient, updateClient, deleteClient } from '../services/storageService';
-import { Plus, MapPin, Store, Edit2, Trash, Save, X, Loader2 } from 'lucide-react';
+import { Plus, MapPin, Store, Edit2, Trash, Save, X, Loader2, AlertCircle } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -11,6 +11,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   const [form, setForm] = useState({
     name: '', city: '', neighborhood: '', state: ''
@@ -30,6 +31,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg('');
     
     try {
       if (editingId) {
@@ -50,9 +52,9 @@ const ClientManager: React.FC<Props> = ({ user }) => {
       }
       await fetchClients();
       setForm({ name: '', city: '', neighborhood: '', state: '' });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao salvar:", error);
-      alert("Erro ao salvar cliente.");
+      setErrorMsg("Erro ao salvar dados. Verifique a conexão.");
     } finally {
       setLoading(false);
     }
@@ -61,6 +63,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const handleEdit = (e: React.MouseEvent, client: Client) => {
     e.preventDefault();
     e.stopPropagation();
+    setErrorMsg('');
     setForm({
         name: client.name,
         city: client.city,
@@ -74,6 +77,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation(); // CRITICAL: Stop event bubbling
+    setErrorMsg('');
     
     if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
         setLoading(true);
@@ -83,9 +87,15 @@ const ClientManager: React.FC<Props> = ({ user }) => {
               handleCancel();
             }
             await fetchClients();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Erro ao deletar:", error);
-            alert("Não foi possível excluir o cliente.");
+            
+            // Check for foreign key violation (Postgres error code 23503)
+            if (error?.code === '23503' || (error?.message && error.message.includes('foreign key'))) {
+                alert("Não é possível excluir este cliente pois ele possui PEDIDOS registrados no sistema. Exclua os pedidos primeiro.");
+            } else {
+                alert(`Não foi possível excluir o cliente. Erro: ${error?.message || 'Desconhecido'}`);
+            }
         } finally {
             setLoading(false);
         }
@@ -95,6 +105,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
   const handleCancel = () => {
     setEditingId(null);
     setForm({ name: '', city: '', neighborhood: '', state: '' });
+    setErrorMsg('');
   };
 
   return (
@@ -103,6 +114,12 @@ const ClientManager: React.FC<Props> = ({ user }) => {
         <h2 className="text-2xl font-bold text-gray-800">Meus Clientes</h2>
         {loading && <Loader2 className="animate-spin text-blue-600" />}
       </div>
+
+      {errorMsg && (
+        <div className="bg-red-50 text-red-700 p-3 rounded flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2" /> {errorMsg}
+        </div>
+      )}
 
       <div className={`p-6 rounded-lg shadow-sm border transition-colors ${editingId ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'}`}>
         <div className="flex justify-between items-center mb-4">

@@ -10,12 +10,12 @@ export const getUsers = async (): Promise<User[]> => {
 
 export const addUser = async (user: User): Promise<void> => {
   const { error } = await supabase.from('users').insert(user);
-  if (error) console.error(error);
+  if (error) throw error;
 };
 
 export const deleteUser = async (id: string): Promise<void> => {
   const { error } = await supabase.from('users').delete().eq('id', id);
-  if (error) console.error(error);
+  if (error) throw error;
 };
 
 // --- PRODUCTS ---
@@ -26,14 +26,13 @@ export const getProducts = async (): Promise<ProductDef[]> => {
 };
 
 export const addProduct = async (prod: ProductDef): Promise<void> => {
-  // Check duplicate logic handled by DB constraints ideally, or client side check before call
   const { error } = await supabase.from('products').insert(prod);
-  if (error) console.error(error);
+  if (error) throw error;
 };
 
 export const deleteProduct = async (id: string): Promise<void> => {
   const { error } = await supabase.from('products').delete().eq('id', id);
-  if (error) console.error(error);
+  if (error) throw error;
 };
 
 // --- CLIENTS ---
@@ -49,7 +48,7 @@ export const getClients = async (repId?: string): Promise<Client[]> => {
 
 export const addClient = async (client: Client): Promise<void> => {
   const { error } = await supabase.from('clients').insert(client);
-  if (error) console.error("Erro ao adicionar cliente:", error);
+  if (error) throw error;
 };
 
 export const updateClient = async (updatedClient: Client): Promise<void> => {
@@ -57,12 +56,13 @@ export const updateClient = async (updatedClient: Client): Promise<void> => {
     .from('clients')
     .update(updatedClient)
     .eq('id', updatedClient.id);
-  if (error) console.error("Erro ao atualizar cliente:", error);
+  if (error) throw error;
 };
 
 export const deleteClient = async (id: string): Promise<void> => {
+  // Agora lança o erro para ser capturado no componente
   const { error } = await supabase.from('clients').delete().eq('id', id);
-  if (error) console.error("Erro ao deletar cliente:", error);
+  if (error) throw error; 
 };
 
 // --- ORDERS ---
@@ -73,21 +73,32 @@ export const getOrders = async (): Promise<Order[]> => {
 };
 
 export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order | null> => {
-  // Fetch current sequence
-  // Note: In a real DB, use a SERIAL or SEQUENCE column. simulating here.
-  const { data: seqData } = await supabase.from('app_config').select('value').eq('key', 'order_seq').single();
-  let currentSeq = seqData?.value || 1000;
-  const newSeq = currentSeq + 1;
+  let newSeq = 1000;
 
-  // Update Seq (Optimistic)
-  await supabase.from('app_config').upsert({ key: 'order_seq', value: newSeq });
+  try {
+    // Tenta buscar a sequência. Se a tabela app_config não existir, cairá no catch.
+    const { data: seqData, error: seqError } = await supabase.from('app_config').select('value').eq('key', 'order_seq').maybeSingle();
+    
+    if (!seqError) {
+      const currentSeq = seqData?.value || 1000;
+      newSeq = currentSeq + 1;
+      // Atualiza Seq (Optimistic)
+      await supabase.from('app_config').upsert({ key: 'order_seq', value: newSeq });
+    } else {
+        // Fallback simples se app_config não existir: usa timestamp curto
+        newSeq = Math.floor(Date.now() / 1000) % 100000;
+    }
+  } catch (err) {
+    console.warn("Tabela app_config não encontrada ou erro de permissão. Usando ID baseado em timestamp.");
+    newSeq = Math.floor(Date.now() / 1000) % 100000;
+  }
 
   const newOrder = { ...order, displayId: newSeq };
   const { error } = await supabase.from('orders').insert(newOrder);
   
   if (error) {
-    console.error(error);
-    return null;
+    console.error("Erro ao criar pedido:", error);
+    throw error;
   }
   return newOrder as Order;
 };
@@ -98,6 +109,5 @@ export const updateOrderStatus = async (id: string, status: 'open' | 'printed'):
 };
 
 export const initializeStorage = () => {
-  // No-op for Supabase, data is in cloud
-  console.log("Supabase storage service initialized");
+  console.log("Serviço de armazenamento Supabase inicializado");
 };
