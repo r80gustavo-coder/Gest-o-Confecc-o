@@ -28,6 +28,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [currentRef, setCurrentRef] = useState('');
   const [currentColor, setCurrentColor] = useState('');
   const [currentGrid, setCurrentGrid] = useState<SizeGridType>(SizeGridType.ADULT);
+  const [manualUnitPrice, setManualUnitPrice] = useState<string>(''); // New state for editable price
   
   // Editing State
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -70,14 +71,16 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       if (editingIndex === null) {
         const prod = products.find(p => p.reference === currentRef);
         if (prod) setCurrentGrid(prod.gridType);
+        
+        // Auto-fill price from config, but allow override
+        const configPrice = priceMap[currentRef] || 0;
+        setManualUnitPrice(configPrice > 0 ? configPrice.toFixed(2) : '');
       }
     } else {
       setAvailableColors([]);
+      if (editingIndex === null) setManualUnitPrice('');
     }
-  }, [currentRef, products, editingIndex]);
-
-  // Derived current price
-  const currentUnitPrice = currentRef ? (priceMap[currentRef] || 0) : 0;
+  }, [currentRef, products, editingIndex, priceMap]);
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,14 +98,17 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
     if (total === 0) return;
 
+    // Use manual price if set, otherwise 0
+    const finalUnitPrice = parseFloat(manualUnitPrice) || 0;
+
     const newItem: OrderItem = {
       reference: currentRef,
       color: currentColor,
       gridType: currentGrid,
       sizes: sizesNum,
       totalQty: total,
-      unitPrice: currentUnitPrice,
-      totalItemValue: total * currentUnitPrice
+      unitPrice: finalUnitPrice,
+      totalItemValue: total * finalUnitPrice
     };
 
     if (editingIndex !== null) {
@@ -116,6 +122,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     
     setQuickSizes({});
     setCurrentColor('');
+    setManualUnitPrice('');
     if (editingIndex !== null) {
       setCurrentRef('');
     }
@@ -127,6 +134,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     setCurrentRef(item.reference);
     setCurrentColor(item.color);
     setCurrentGrid(item.gridType);
+    setManualUnitPrice(item.unitPrice.toString());
     
     const sizeStrings: {[key: string]: string} = {};
     Object.entries(item.sizes).forEach(([k, v]) => {
@@ -146,6 +154,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         setQuickSizes({});
         setCurrentColor('');
         setCurrentRef('');
+        setManualUnitPrice('');
       }
     }
   };
@@ -269,22 +278,23 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                 <datalist id="refs">
                 {uniqueRefs.map(r => <option key={r} value={r} />)}
                 </datalist>
-                
-                {currentRef && (
-                  <div className={`text-xs mt-1 font-bold flex items-center ${currentUnitPrice > 0 ? 'text-blue-700' : 'text-red-600'}`}>
-                    {currentUnitPrice > 0 ? (
-                      <>
-                        <DollarSign className="w-3 h-3 mr-0.5" />
-                        Preço Unit: R$ {currentUnitPrice.toFixed(2)}
-                      </>
-                    ) : (
-                      <>
-                        <AlertTriangle className="w-3 h-3 mr-1" />
-                        Sem preço cadastrado! (R$ 0,00)
-                      </>
-                    )}
-                  </div>
-                )}
+            </div>
+
+            {/* Price Override */}
+             <div className="w-full md:w-32">
+                <label className="block text-xs font-bold text-gray-700 mb-1">Preço Unit. (R$)</label>
+                <div className="relative">
+                   <span className="absolute left-2 top-2 text-gray-500 text-sm">R$</span>
+                   <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="w-full border p-2 pl-8 rounded focus:ring-2 focus:ring-blue-500 h-10 font-bold text-gray-800"
+                      value={manualUnitPrice}
+                      onChange={(e) => setManualUnitPrice(e.target.value)}
+                      placeholder="0.00"
+                   />
+                </div>
             </div>
 
             {/* Color */}
@@ -349,6 +359,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                     setQuickSizes({});
                     setCurrentColor('');
                     setCurrentRef('');
+                    setManualUnitPrice('');
                 }}
                 className="bg-gray-400 text-white p-3 rounded font-bold hover:bg-gray-500 w-24"
                 >
