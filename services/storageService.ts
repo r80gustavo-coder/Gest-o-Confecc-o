@@ -1,4 +1,5 @@
-import { User, ProductDef, Order, Client, Role } from '../types';
+
+import { User, ProductDef, Order, Client, Role, RepPrice } from '../types';
 import { supabase } from './supabaseClient';
 
 // --- USERS ---
@@ -39,6 +40,48 @@ export const addProduct = async (prod: ProductDef): Promise<void> => {
 export const deleteProduct = async (id: string): Promise<void> => {
   const { error } = await supabase.from('products').delete().eq('id', id);
   if (error) throw error;
+};
+
+// --- REP PRICES ---
+export const getRepPrices = async (repId: string): Promise<RepPrice[]> => {
+  const { data, error } = await supabase.from('rep_prices').select('*').eq('rep_id', repId);
+  if (error) {
+    console.warn("Tabela rep_prices pode não existir ainda ou erro de conexão", error);
+    return [];
+  }
+  return data?.map(d => ({
+    id: d.id,
+    repId: d.rep_id,
+    reference: d.reference,
+    price: d.price
+  })) || [];
+};
+
+export const upsertRepPrice = async (priceData: RepPrice): Promise<void> => {
+  // Verifica se já existe para atualizar ou inserir
+  const { data: existing } = await supabase
+    .from('rep_prices')
+    .select('id')
+    .eq('rep_id', priceData.repId)
+    .eq('reference', priceData.reference)
+    .single();
+
+  if (existing) {
+     const { error } = await supabase
+      .from('rep_prices')
+      .update({ price: priceData.price })
+      .eq('id', existing.id);
+     if (error) throw error;
+  } else {
+     const { error } = await supabase
+      .from('rep_prices')
+      .insert({ 
+        rep_id: priceData.repId, 
+        reference: priceData.reference, 
+        price: priceData.price 
+      });
+     if (error) throw error;
+  }
 };
 
 // --- CLIENTS ---

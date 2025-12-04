@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem } from '../types';
 import { getOrders, updateOrderStatus } from '../services/storageService';
@@ -246,13 +247,14 @@ const AdminOrderList: React.FC = () => {
                 <th className="p-4">Cliente</th>
                 <th className="p-4">Repr.</th>
                 <th className="p-4 text-center">Peças</th>
+                <th className="p-4 text-center">Valor Total</th>
                 <th className="p-4 text-center">Status</th>
                 <th className="p-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredOrders.length === 0 ? (
-                  <tr><td colSpan={8} className="p-8 text-center text-gray-400">Nenhum pedido encontrado neste período.</td></tr>
+                  <tr><td colSpan={9} className="p-8 text-center text-gray-400">Nenhum pedido encontrado neste período.</td></tr>
               ) : filteredOrders.map(order => (
                 <tr key={order.id} className={`hover:bg-blue-50 transition ${selectedOrderIds.has(order.id) ? 'bg-blue-50' : ''}`}>
                   <td className="p-4">
@@ -272,7 +274,8 @@ const AdminOrderList: React.FC = () => {
                     <div className="text-xs text-gray-500">{order.clientCity}</div>
                   </td>
                   <td className="p-4 text-sm text-gray-600">{order.repName}</td>
-                  <td className="p-4 text-center font-bold text-blue-600">{order.totalPieces}</td>
+                  <td className="p-4 text-center font-bold text-gray-600">{order.totalPieces}</td>
+                  <td className="p-4 text-center font-bold text-green-600">R$ {(order.finalTotalValue || 0).toFixed(2)}</td>
                   <td className="p-4 text-center">
                     {order.status === 'printed' ? (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -337,7 +340,8 @@ const AdminOrderList: React.FC = () => {
                                     {ALL_SIZES.map(s => (
                                         <th key={s} className="border border-black p-1 text-center w-8">{s}</th>
                                     ))}
-                                    <th className="border border-black p-1 w-16 text-right">Total</th>
+                                    <th className="border border-black p-1 w-16 text-right">Qtd</th>
+                                    <th className="border border-black p-1 w-24 text-right">Total (R$)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -350,14 +354,31 @@ const AdminOrderList: React.FC = () => {
                                                 {item.sizes[s] ? <span className="font-bold">{item.sizes[s]}</span> : <span className="text-gray-300">-</span>}
                                             </td>
                                         ))}
-                                        <td className="border border-black p-1 text-right font-bold text-lg">{item.totalQty}</td>
+                                        <td className="border border-black p-1 text-right font-bold">{item.totalQty}</td>
+                                        <td className="border border-black p-1 text-right">{(item.totalItemValue || 0).toFixed(2)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot>
                                 <tr className="bg-gray-100">
-                                    <td colSpan={2} className="border border-black p-2 text-right font-bold uppercase">Total Peças</td>
-                                    <td colSpan={ALL_SIZES.length + 1} className="border border-black p-2 text-right font-bold text-lg">{order.totalPieces}</td>
+                                    <td colSpan={2} className="border border-black p-2 text-right font-bold uppercase">Totais</td>
+                                    <td colSpan={ALL_SIZES.length} className="border border-black p-2"></td>
+                                    <td className="border border-black p-2 text-right font-bold">{order.totalPieces}</td>
+                                    <td className="border border-black p-2 text-right font-bold">-</td>
+                                </tr>
+                                {order.discountValue > 0 && (
+                                    <tr>
+                                       <td colSpan={ALL_SIZES.length + 3} className="border border-black p-2 text-right">
+                                          Desconto: {order.discountType === 'percentage' ? `${order.discountValue}%` : `R$ ${order.discountValue}`}
+                                       </td>
+                                       <td className="border border-black p-2 text-right text-red-600 font-bold">
+                                         - {order.discountType === 'percentage' ? ((order.subtotalValue * order.discountValue)/100).toFixed(2) : order.discountValue.toFixed(2)}
+                                       </td>
+                                    </tr>
+                                )}
+                                <tr className="text-lg">
+                                     <td colSpan={ALL_SIZES.length + 3} className="border border-black p-2 text-right uppercase font-bold">Total Final</td>
+                                     <td className="border border-black p-2 text-right font-bold">R$ {(order.finalTotalValue || 0).toFixed(2)}</td>
                                 </tr>
                             </tfoot>
                         </table>

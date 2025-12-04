@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
-import { getProducts, getClients, addOrder } from '../services/storageService';
-import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check } from 'lucide-react';
+import { getProducts, getClients, addOrder, getRepPrices } from '../services/storageService';
+import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -13,6 +14,7 @@ const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [products, setProducts] = useState<ProductDef[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [priceMap, setPriceMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   
   // Form State
@@ -20,6 +22,10 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   
+  // Discount State
+  const [discountType, setDiscountType] = useState<'percentage' | 'fixed' | ''>('');
+  const [discountValue, setDiscountValue] = useState<string>('');
+
   // Item Entry State
   const [currentRef, setCurrentRef] = useState('');
   const [currentColor, setCurrentColor] = useState('');
@@ -31,32 +37,38 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   // Order Items
   const [items, setItems] = useState<OrderItem[]>([]);
 
-  // Helpers to speed up entry
+  // Helpers
   const [availableColors, setAvailableColors] = useState<string[]>([]);
-  
-  // Quick Entry Grid State
   const [quickSizes, setQuickSizes] = useState<{[key: string]: string}>({});
 
   useEffect(() => {
     const loadData = async () => {
         setLoading(true);
-        const [p, c] = await Promise.all([getProducts(), getClients(user.id)]);
+        const [p, c, prices] = await Promise.all([
+          getProducts(), 
+          getClients(user.id),
+          getRepPrices(user.id)
+        ]);
         setProducts(p);
         setClients(c);
+        
+        // Build efficient price lookup
+        const pm: Record<string, number> = {};
+        prices.forEach(pr => pm[pr.reference] = pr.price);
+        setPriceMap(pm);
+
         setLoading(false);
     };
     loadData();
   }, [user.id]);
 
   useEffect(() => {
-    // Filter colors when ref changes
     if (currentRef) {
       const colors = products
         .filter(p => p.reference === currentRef)
         .map(p => p.color);
       setAvailableColors([...new Set(colors)]);
       
-      // Auto select grid type from product def if possible, but only if not editing manually
       if (editingIndex === null) {
         const prod = products.find(p => p.reference === currentRef);
         if (prod) setCurrentGrid(prod.gridType);
@@ -66,11 +78,13 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     }
   }, [currentRef, products, editingIndex]);
 
+  // Derived current price
+  const currentUnitPrice = currentRef ? (priceMap[currentRef] || 0) : 0;
+
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentRef || !currentColor) return;
 
-    // Convert quickSizes strings to numbers
     const sizesNum: {[key: string]: number} = {};
     let total = 0;
     Object.entries(quickSizes).forEach(([size, qtyStr]) => {
@@ -88,7 +102,9 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       color: currentColor,
       gridType: currentGrid,
       sizes: sizesNum,
-      totalQty: total
+      totalQty: total,
+      unitPrice: currentUnitPrice,
+      totalItemValue: total * currentUnitPrice
     };
 
     if (editingIndex !== null) {
@@ -100,11 +116,8 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       setItems([...items, newItem]);
     }
     
-    // Reset form
     setQuickSizes({});
     setCurrentColor('');
-    // Keep Ref if we are just adding new lines, but if we were editing, maybe clear it?
-    // Let's keep Ref for speed unless we just finished an edit.
     if (editingIndex !== null) {
       setCurrentRef('');
     }
@@ -117,14 +130,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     setCurrentColor(item.color);
     setCurrentGrid(item.gridType);
     
-    // Convert numbers back to string for inputs
     const sizeStrings: {[key: string]: string} = {};
     Object.entries(item.sizes).forEach(([k, v]) => {
       sizeStrings[k] = v.toString();
     });
     setQuickSizes(sizeStrings);
-
-    // Scroll top
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -141,6 +151,21 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       }
     }
   };
+
+  // Calculations
+  const subtotalValue = items.reduce((acc, item) => acc + item.totalItemValue, 0);
+  
+  let finalTotalValue = subtotalValue;
+  const distValNum = parseFloat(discountValue) || 0;
+  
+  if (discountType === 'percentage') {
+    finalTotalValue = subtotalValue - (subtotalValue * (distValNum / 100));
+  } else if (discountType === 'fixed') {
+    finalTotalValue = subtotalValue - distValNum;
+  }
+  
+  // Prevent negative total
+  if (finalTotalValue < 0) finalTotalValue = 0;
 
   const handleSaveOrder = async () => {
     if (!selectedClientId || items.length === 0) return;
@@ -162,14 +187,17 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       paymentMethod,
       status: 'open',
       items,
-      totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0)
+      totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0),
+      subtotalValue,
+      discountType: discountType || null,
+      discountValue: distValNum,
+      finalTotalValue
     });
     setLoading(false);
 
     onOrderCreated();
   };
 
-  // Unique list of references for datalist
   const uniqueRefs = [...new Set(products.map(p => p.reference))];
 
   if (loading && products.length === 0) {
@@ -183,7 +211,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         {editingIndex !== null && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">Modo Edição</span>}
       </h2>
 
-      {/* HEADER: Client Info - Stacked on Mobile */}
+      {/* HEADER: Client Info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 pb-6 border-b">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
@@ -224,7 +252,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         </div>
       </div>
 
-      {/* INPUT AREA: Optimized for Mobile */}
+      {/* INPUT AREA */}
       <div className={`p-3 md:p-4 rounded-lg mb-6 border transition-colors ${editingIndex !== null ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-100'}`}>
         <form onSubmit={handleAddItem} className="flex flex-col gap-3">
           
@@ -243,6 +271,12 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                 <datalist id="refs">
                 {uniqueRefs.map(r => <option key={r} value={r} />)}
                 </datalist>
+                {currentRef && (
+                  <div className="text-xs mt-1 text-blue-700 font-bold flex items-center">
+                    <DollarSign className="w-3 h-3 mr-0.5" />
+                    Preço Unit: R$ {currentUnitPrice.toFixed(2)}
+                  </div>
+                )}
             </div>
 
             {/* Color */}
@@ -262,7 +296,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             </div>
           </div>
 
-          {/* Size Grid - Horizontal Scroll on Mobile */}
+          {/* Size Grid */}
           <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Grade de Quantidades</label>
               <div className="bg-white p-2 rounded border border-gray-200 shadow-sm overflow-x-auto">
@@ -287,7 +321,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
               </div>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex gap-2 mt-2">
             <button 
                 type="submit" 
@@ -316,75 +349,23 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             )}
           </div>
           
-          <div className="flex gap-4 justify-center mt-1">
+           <div className="flex gap-4 justify-center mt-1">
              <label className="flex items-center text-xs text-gray-600 cursor-pointer p-1">
-               <input 
-                 type="radio" 
-                 name="gridType" 
-                 checked={currentGrid === SizeGridType.ADULT} 
-                 onChange={() => setCurrentGrid(SizeGridType.ADULT)} 
-                 className="mr-1"
-               /> Normal (P-GG)
+               <input type="radio" name="gridType" checked={currentGrid === SizeGridType.ADULT} onChange={() => setCurrentGrid(SizeGridType.ADULT)} className="mr-1" /> Normal
              </label>
              <label className="flex items-center text-xs text-gray-600 cursor-pointer p-1">
-               <input 
-                 type="radio" 
-                 name="gridType" 
-                 checked={currentGrid === SizeGridType.PLUS} 
-                 onChange={() => setCurrentGrid(SizeGridType.PLUS)} 
-                 className="mr-1"
-               /> Plus (G1-G3)
+               <input type="radio" name="gridType" checked={currentGrid === SizeGridType.PLUS} onChange={() => setCurrentGrid(SizeGridType.PLUS)} className="mr-1" /> Plus Size
              </label>
           </div>
-
         </form>
       </div>
 
-      {/* ITEMS LIST: Cards on Mobile, Table on Desktop */}
+      {/* ITEMS LIST */}
       {items.length > 0 && (
-        <div className="mb-20">
+        <div className="mb-24">
             <h3 className="font-bold text-gray-700 mb-2 px-1">Itens Adicionados ({items.length})</h3>
             
-            {/* Desktop Table */}
-            <div className="hidden md:block overflow-x-auto border rounded-lg shadow-sm bg-white">
-                <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-100 text-gray-600 font-bold uppercase text-xs">
-                    <tr>
-                        <th className="p-3">Ref/Cor</th>
-                        {ALL_SIZES.map(s => (
-                        <th key={s} className="p-2 text-center bg-gray-50 w-10">{s}</th>
-                        ))}
-                        <th className="p-3 text-right">Total</th>
-                        <th className="p-3 text-center">Ações</th>
-                    </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                    {items.map((item, idx) => (
-                        <tr key={idx} className={`hover:bg-blue-50 ${editingIndex === idx ? 'bg-orange-50 ring-2 ring-orange-200' : ''}`}>
-                        <td className="p-3">
-                            <div className="font-bold text-gray-800">{item.reference}</div>
-                            <div className="text-xs text-gray-500 uppercase">{item.color}</div>
-                        </td>
-                        {ALL_SIZES.map(s => (
-                            <td key={s} className="p-2 text-center">
-                            {item.sizes[s] ? <span className="font-bold text-blue-700">{item.sizes[s]}</span> : <span className="text-gray-300">-</span>}
-                            </td>
-                        ))}
-                        <td className="p-3 text-right font-bold text-lg">{item.totalQty}</td>
-                        <td className="p-3 text-center">
-                            <div className="flex justify-center gap-1">
-                            <button onClick={() => startEditItem(idx)} className="text-blue-500 hover:bg-blue-100 p-1 rounded"><Edit2 className="w-4 h-4" /></button>
-                            <button onClick={() => removeItem(idx)} className="text-red-500 hover:bg-red-100 p-1 rounded"><Trash className="w-4 h-4" /></button>
-                            </div>
-                        </td>
-                        </tr>
-                    ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Mobile Cards */}
-            <div className="md:hidden space-y-3">
+            <div className="space-y-3">
                 {items.map((item, idx) => (
                     <div key={idx} className={`bg-white border rounded-lg p-3 shadow-sm ${editingIndex === idx ? 'border-orange-400 ring-1 ring-orange-200' : 'border-gray-200'}`}>
                         <div className="flex justify-between items-start mb-2 border-b pb-2">
@@ -394,10 +375,12 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                             </div>
                             <div className="text-right">
                                 <span className="block font-bold text-blue-600 text-lg">{item.totalQty} pçs</span>
+                                <span className="block text-xs text-gray-500">
+                                   Unit: R$ {item.unitPrice.toFixed(2)} | Total: R$ {item.totalItemValue.toFixed(2)}
+                                </span>
                             </div>
                         </div>
                         
-                        {/* Mini Grid for Mobile */}
                         <div className="grid grid-cols-4 gap-2 text-xs mb-3">
                             {Object.entries(item.sizes).map(([size, qty]) => (
                                 <div key={size} className="bg-gray-50 p-1 rounded text-center border border-gray-100">
@@ -408,16 +391,10 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                         </div>
 
                         <div className="flex gap-2">
-                             <button 
-                                onClick={() => startEditItem(idx)} 
-                                className="flex-1 bg-blue-50 text-blue-700 py-2 rounded text-sm font-medium flex items-center justify-center"
-                             >
+                             <button onClick={() => startEditItem(idx)} className="flex-1 bg-blue-50 text-blue-700 py-2 rounded text-sm font-medium flex items-center justify-center">
                                 <Edit2 className="w-3 h-3 mr-1" /> Editar
                              </button>
-                             <button 
-                                onClick={() => removeItem(idx)} 
-                                className="flex-1 bg-red-50 text-red-700 py-2 rounded text-sm font-medium flex items-center justify-center"
-                             >
+                             <button onClick={() => removeItem(idx)} className="flex-1 bg-red-50 text-red-700 py-2 rounded text-sm font-medium flex items-center justify-center">
                                 <Trash className="w-3 h-3 mr-1" /> Remover
                              </button>
                         </div>
@@ -425,15 +402,49 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                 ))}
             </div>
 
-            {/* Total Footer */}
-            <div className="mt-4 bg-gray-800 text-white p-4 rounded-lg flex justify-between items-center shadow-lg">
-                <span className="text-sm font-medium uppercase tracking-wider">Total do Pedido</span>
-                <span className="text-2xl font-bold text-yellow-400">{items.reduce((acc, i) => acc + i.totalQty, 0)} Peças</span>
+            {/* FINANCIAL SUMMARY & DISCOUNT */}
+            <div className="mt-6 bg-gray-50 border rounded-xl p-4">
+              <h4 className="font-bold text-gray-800 flex items-center mb-4">
+                 <Calculator className="w-4 h-4 mr-2" /> Resumo Financeiro
+              </h4>
+              
+              <div className="flex justify-between mb-2 text-gray-600">
+                  <span>Subtotal:</span>
+                  <span className="font-medium">R$ {subtotalValue.toFixed(2)}</span>
+              </div>
+
+              <div className="mb-4 pt-2 border-t border-gray-200">
+                 <label className="block text-xs font-bold text-gray-500 mb-1">Aplicar Desconto</label>
+                 <div className="flex gap-2">
+                    <select 
+                      className="border rounded p-2 text-sm bg-white"
+                      value={discountType}
+                      onChange={(e) => setDiscountType(e.target.value as any)}
+                    >
+                        <option value="">Sem Desconto</option>
+                        <option value="percentage">Porcentagem (%)</option>
+                        <option value="fixed">Valor Fixo (R$)</option>
+                    </select>
+                    <input 
+                      type="number"
+                      placeholder={discountType === 'percentage' ? "%" : "R$"}
+                      className="border rounded p-2 text-sm w-24"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      disabled={!discountType}
+                    />
+                 </div>
+              </div>
+
+              <div className="pt-3 border-t-2 border-gray-200 flex justify-between items-center">
+                  <span className="text-lg font-bold text-gray-800 uppercase">Total Final</span>
+                  <span className="text-2xl font-bold text-green-600">R$ {finalTotalValue.toFixed(2)}</span>
+              </div>
             </div>
         </div>
       )}
 
-      {/* Floating Save Button on Mobile */}
+      {/* Footer Save Button */}
       <div className="fixed bottom-0 left-0 w-full p-4 bg-white border-t md:static md:bg-transparent md:border-0 md:p-0 md:mt-6 z-10 flex justify-end">
         <button 
           onClick={handleSaveOrder}
@@ -441,7 +452,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
           className="w-full md:w-auto bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 shadow-md flex items-center justify-center font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <Check className="w-5 h-5 mr-2" />}
-          {editingIndex !== null ? 'Salve a Edição' : 'Finalizar Pedido'}
+          {editingIndex !== null ? 'Salve a Edição' : `Finalizar (R$ ${finalTotalValue.toFixed(2)})`}
         </button>
       </div>
     </div>

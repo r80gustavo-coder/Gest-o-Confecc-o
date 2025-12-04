@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Login from './components/Login';
@@ -8,6 +9,7 @@ import RepManager from './components/RepManager';
 import ClientManager from './components/ClientManager';
 import RepOrderForm from './components/RepOrderForm';
 import RepOrderList from './components/RepOrderList';
+import RepPriceManager from './components/RepPriceManager';
 import { User, Role } from './types';
 import { initializeStorage } from './services/storageService';
 
@@ -66,6 +68,7 @@ const App: React.FC = () => {
           {activeTab === 'rep-dashboard' && <RepOrderList user={user} />}
           {activeTab === 'new-order' && <RepOrderForm user={user} onOrderCreated={() => setActiveTab('rep-dashboard')} />}
           {activeTab === 'clients' && <ClientManager user={user} />}
+          {activeTab === 'prices' && <RepPriceManager user={user} />}
         </>
       )}
     </Layout>

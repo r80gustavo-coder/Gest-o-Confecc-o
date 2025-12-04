@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
 import { getOrders, getClients } from '../services/storageService';
@@ -64,7 +65,9 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                             <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
                         <div className="text-gray-700 font-medium">{order.clientName}</div>
-                        <div className="text-sm text-gray-500">{order.items.length} itens • {order.totalPieces} peças</div>
+                        <div className="text-sm text-gray-500 mt-1">
+                            {order.totalPieces} peças • <span className="text-green-600 font-bold">R$ {(order.finalTotalValue || 0).toFixed(2)}</span>
+                        </div>
                     </div>
                     
                     <div className="flex items-center gap-4">
@@ -128,6 +131,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                     <th className="border p-2 text-left">Cor</th>
                                     <th className="border p-2 text-center">Grade</th>
                                     <th className="border p-2 text-right">Qtd</th>
+                                    <th className="border p-2 text-right">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -143,13 +147,25 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                             ))}
                                         </td>
                                         <td className="border p-2 text-right font-bold">{item.totalQty}</td>
+                                        <td className="border p-2 text-right">R$ {(item.totalItemValue || 0).toFixed(2)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot className="bg-gray-50 font-bold">
                                 <tr>
-                                    <td colSpan={3} className="border p-2 text-right">Total</td>
+                                    <td colSpan={3} className="border p-2 text-right">Total Peças</td>
                                     <td className="border p-2 text-right">{viewOrder.totalPieces}</td>
+                                    <td className="border p-2 text-right">-</td>
+                                </tr>
+                                {viewOrder.discountValue > 0 && (
+                                    <tr className="text-red-600">
+                                        <td colSpan={4} className="border p-2 text-right">Desconto ({viewOrder.discountType === 'percentage' ? '%' : 'R$'})</td>
+                                        <td className="border p-2 text-right">- {viewOrder.discountType === 'percentage' ? `${viewOrder.discountValue}%` : `R$ ${viewOrder.discountValue}`}</td>
+                                    </tr>
+                                )}
+                                <tr className="text-lg">
+                                    <td colSpan={4} className="border p-2 text-right uppercase">Total Final</td>
+                                    <td className="border p-2 text-right text-green-700">R$ {(viewOrder.finalTotalValue || 0).toFixed(2)}</td>
                                 </tr>
                             </tfoot>
                         </table>

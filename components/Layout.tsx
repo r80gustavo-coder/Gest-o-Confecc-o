@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { User, Role } from '../types';
-import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X } from 'lucide-react';
+import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X, DollarSign } from 'lucide-react';
 
 interface LayoutProps {
   user: User;
@@ -51,6 +52,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
               <NavItem id="rep-dashboard" icon={LayoutDashboard} label="Meus Pedidos" />
               <NavItem id="new-order" icon={ShoppingCart} label="Novo Pedido" />
               <NavItem id="clients" icon={Users} label="Meus Clientes" />
+              <NavItem id="prices" icon={DollarSign} label="Tabela de Preços" />
             </>
           )}
         </nav>
@@ -90,6 +92,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
                 <NavItem id="rep-dashboard" icon={LayoutDashboard} label="Meus Pedidos" />
                 <NavItem id="new-order" icon={ShoppingCart} label="Novo Pedido" />
                 <NavItem id="clients" icon={Users} label="Meus Clientes" />
+                <NavItem id="prices" icon={DollarSign} label="Tabela de Preços" />
               </>
             )}
             <div className="border-t pt-4 mt-4">

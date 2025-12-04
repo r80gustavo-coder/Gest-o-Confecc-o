@@ -1,3 +1,4 @@
+
 export enum Role {
   ADMIN = 'admin',
   REP = 'rep'
@@ -23,6 +24,13 @@ export interface ProductDef {
   gridType: SizeGridType;
 }
 
+export interface RepPrice {
+  id?: string;
+  repId: string;
+  reference: string;
+  price: number;
+}
+
 export interface Client {
   id: string;
   repId: string;
@@ -38,6 +46,8 @@ export interface OrderItem {
   gridType: SizeGridType;
   sizes: { [size: string]: number }; // e.g. { "P": 10, "M": 5 }
   totalQty: number;
+  unitPrice: number; // Preço unitário no momento da venda
+  totalItemValue: number; // unitPrice * totalQty
 }
 
 export interface Order {
@@ -55,6 +65,12 @@ export interface Order {
   status: 'open' | 'printed';
   items: OrderItem[];
   totalPieces: number;
+  
+  // Financeiro
+  subtotalValue: number; // Soma dos itens
+  discountType: 'percentage' | 'fixed' | null;
+  discountValue: number; // Valor numérico do desconto (ex: 10 para 10% ou 10 reais)
+  finalTotalValue: number; // Valor final a pagar
 }
 
 export const SIZE_GRIDS = {
