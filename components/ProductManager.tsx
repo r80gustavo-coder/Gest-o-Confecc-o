@@ -110,48 +110,50 @@ const ProductManager: React.FC = () => {
           <button 
             type="submit"
             disabled={loading}
-            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center h-[42px]"
+            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center h-[42px] mt-4 md:mt-0"
           >
             <Plus className="w-5 h-5 mr-2" /> Adicionar
           </button>
         </form>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full text-left">
-            <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-sm">
-                <tr>
-                    <th className="p-4">Referência</th>
-                    <th className="p-4">Cor</th>
-                    <th className="p-4">Grade</th>
-                    <th className="p-4 text-right">Ações</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y">
-                {products.length === 0 && !loading && (
-                    <tr><td colSpan={4} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
-                )}
-                {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => (
-                    <tr key={prod.id} className="hover:bg-gray-50">
-                        <td className="p-4 font-bold">{prod.reference}</td>
-                        <td className="p-4 uppercase">{prod.color}</td>
-                        <td className="p-4 text-sm text-gray-500">
-                            {prod.gridType === SizeGridType.ADULT && 'Normal'}
-                            {prod.gridType === SizeGridType.PLUS && 'Plus Size'}
-                        </td>
-                        <td className="p-4 text-right">
-                            <button 
-                                onClick={() => handleDelete(prod.id)}
-                                className="text-red-500 hover:bg-red-50 p-2 rounded transition"
-                                title="Remover Produto"
-                            >
-                                <Trash className="w-5 h-5" />
-                            </button>
-                        </td>
+      <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
+        <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[600px]">
+                <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-sm">
+                    <tr>
+                        <th className="p-4">Referência</th>
+                        <th className="p-4">Cor</th>
+                        <th className="p-4">Grade</th>
+                        <th className="p-4 text-right">Ações</th>
                     </tr>
-                ))}
-            </tbody>
-        </table>
+                </thead>
+                <tbody className="divide-y">
+                    {products.length === 0 && !loading && (
+                        <tr><td colSpan={4} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
+                    )}
+                    {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => (
+                        <tr key={prod.id} className="hover:bg-gray-50">
+                            <td className="p-4 font-bold">{prod.reference}</td>
+                            <td className="p-4 uppercase">{prod.color}</td>
+                            <td className="p-4 text-sm text-gray-500">
+                                {prod.gridType === SizeGridType.ADULT && 'Normal'}
+                                {prod.gridType === SizeGridType.PLUS && 'Plus Size'}
+                            </td>
+                            <td className="p-4 text-right">
+                                <button 
+                                    onClick={() => handleDelete(prod.id)}
+                                    className="text-red-500 hover:bg-red-50 p-2 rounded transition"
+                                    title="Remover Produto"
+                                >
+                                    <Trash className="w-5 h-5" />
+                                </button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
       </div>
     </div>
   );

@@ -187,33 +187,35 @@ const AdminOrderList: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-4 rounded-lg shadow-sm">
-        <h2 className="text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
-        <div className="flex flex-col md:flex-row gap-4 items-center w-full xl:w-auto">
-           <div className="flex items-center gap-2">
-             <span className="text-sm text-gray-500 font-medium">De:</span>
-             <input 
-               type="date" 
-               className="border p-2 rounded shadow-sm text-sm" 
-               value={startDate} 
-               onChange={(e) => setStartDate(e.target.value)} 
-             />
-           </div>
-           <div className="flex items-center gap-2">
-             <span className="text-sm text-gray-500 font-medium">Até:</span>
-             <input 
-               type="date" 
-               className="border p-2 rounded shadow-sm text-sm" 
-               value={endDate} 
-               onChange={(e) => setEndDate(e.target.value)} 
-             />
+        <h2 className="text-xl md:text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
+        <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-start md:items-center w-full xl:w-auto">
+           <div className="flex gap-2 w-full md:w-auto">
+             <div className="flex-1">
+                <span className="text-xs text-gray-500 font-medium block">De:</span>
+                <input 
+                  type="date" 
+                  className="border p-2 rounded shadow-sm text-sm w-full" 
+                  value={startDate} 
+                  onChange={(e) => setStartDate(e.target.value)} 
+                />
+             </div>
+             <div className="flex-1">
+                <span className="text-xs text-gray-500 font-medium block">Até:</span>
+                <input 
+                  type="date" 
+                  className="border p-2 rounded shadow-sm text-sm w-full" 
+                  value={endDate} 
+                  onChange={(e) => setEndDate(e.target.value)} 
+                />
+             </div>
            </div>
            
            {selectedOrderIds.size > 0 && (
              <button 
                onClick={() => setShowAggregation(true)}
-               className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center shadow transition w-full md:w-auto justify-center"
+               className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center justify-center shadow transition w-full md:w-auto mt-2 md:mt-0"
              >
                <Calculator className="w-4 h-4 mr-2" />
                Somar ({selectedOrderIds.size})
@@ -222,77 +224,79 @@ const AdminOrderList: React.FC = () => {
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden no-print">
-        {loading ? (
-             <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
-        ) : (
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-gray-50 text-gray-600 text-sm font-bold uppercase">
-            <tr>
-              <th className="p-4 w-10">
-                <input 
-                  type="checkbox" 
-                  onChange={handleSelectAllFiltered}
-                  checked={filteredOrders.length > 0 && selectedOrderIds.size >= filteredOrders.length}
-                  className="w-4 h-4 cursor-pointer"
-                />
-              </th>
-              <th className="p-4">Pedido #</th>
-              <th className="p-4">Data</th>
-              <th className="p-4">Cliente</th>
-              <th className="p-4">Repr.</th>
-              <th className="p-4 text-center">Peças</th>
-              <th className="p-4 text-center">Status</th>
-              <th className="p-4 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filteredOrders.length === 0 ? (
-                <tr><td colSpan={8} className="p-8 text-center text-gray-400">Nenhum pedido encontrado neste período.</td></tr>
-            ) : filteredOrders.map(order => (
-              <tr key={order.id} className={`hover:bg-blue-50 transition ${selectedOrderIds.has(order.id) ? 'bg-blue-50' : ''}`}>
-                <td className="p-4">
+      {/* Orders Table - Scrollable on Mobile */}
+      <div className="bg-white rounded-lg shadow no-print overflow-hidden border border-gray-200">
+        <div className="overflow-x-auto">
+          {loading ? (
+              <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
+          ) : (
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead className="bg-gray-50 text-gray-600 text-sm font-bold uppercase">
+              <tr>
+                <th className="p-4 w-10">
                   <input 
                     type="checkbox" 
-                    checked={selectedOrderIds.has(order.id)} 
-                    onChange={() => toggleSelect(order.id)}
+                    onChange={handleSelectAllFiltered}
+                    checked={filteredOrders.length > 0 && selectedOrderIds.size >= filteredOrders.length}
                     className="w-4 h-4 cursor-pointer"
                   />
-                </td>
-                <td className="p-4 font-bold text-gray-800">#{order.displayId}</td>
-                <td className="p-4 text-sm text-gray-600">
-                  {new Date(order.createdAt).toLocaleDateString('pt-BR')}
-                </td>
-                <td className="p-4 text-sm">
-                  <div className="font-medium text-gray-900">{order.clientName}</div>
-                  <div className="text-xs text-gray-500">{order.clientCity}</div>
-                </td>
-                <td className="p-4 text-sm text-gray-600">{order.repName}</td>
-                <td className="p-4 text-center font-bold text-blue-600">{order.totalPieces}</td>
-                <td className="p-4 text-center">
-                  {order.status === 'printed' ? (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      <CheckCircle className="w-3 h-3 mr-1" /> Impresso
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      Aberto
-                    </span>
-                  )}
-                </td>
-                <td className="p-4 text-right">
-                  <button 
-                    onClick={() => handlePrintIndividual(order)}
-                    className="text-gray-500 hover:text-blue-600 transition p-2"
-                    title="Imprimir Pedido"
-                  >
-                    <Printer className="w-5 h-5" />
-                  </button>
-                  
-                  {/* Hidden Print Template for Individual Orders */}
-                  <div id={`print-order-${order.id}`} className="hidden">
-                    <div className="border-2 border-black p-8 font-sans max-w-3xl mx-auto">
+                </th>
+                <th className="p-4">Pedido #</th>
+                <th className="p-4">Data</th>
+                <th className="p-4">Cliente</th>
+                <th className="p-4">Repr.</th>
+                <th className="p-4 text-center">Peças</th>
+                <th className="p-4 text-center">Status</th>
+                <th className="p-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredOrders.length === 0 ? (
+                  <tr><td colSpan={8} className="p-8 text-center text-gray-400">Nenhum pedido encontrado neste período.</td></tr>
+              ) : filteredOrders.map(order => (
+                <tr key={order.id} className={`hover:bg-blue-50 transition ${selectedOrderIds.has(order.id) ? 'bg-blue-50' : ''}`}>
+                  <td className="p-4">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedOrderIds.has(order.id)} 
+                      onChange={() => toggleSelect(order.id)}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </td>
+                  <td className="p-4 font-bold text-gray-800">#{order.displayId}</td>
+                  <td className="p-4 text-sm text-gray-600">
+                    {new Date(order.createdAt).toLocaleDateString('pt-BR')}
+                  </td>
+                  <td className="p-4 text-sm">
+                    <div className="font-medium text-gray-900">{order.clientName}</div>
+                    <div className="text-xs text-gray-500">{order.clientCity}</div>
+                  </td>
+                  <td className="p-4 text-sm text-gray-600">{order.repName}</td>
+                  <td className="p-4 text-center font-bold text-blue-600">{order.totalPieces}</td>
+                  <td className="p-4 text-center">
+                    {order.status === 'printed' ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3 mr-1" /> Impresso
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        Aberto
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4 text-right">
+                    <button 
+                      onClick={() => handlePrintIndividual(order)}
+                      className="text-gray-500 hover:text-blue-600 transition p-2"
+                      title="Imprimir Pedido"
+                    >
+                      <Printer className="w-5 h-5" />
+                    </button>
+                    
+                    {/* Hidden Print Template */}
+                    <div id={`print-order-${order.id}`} className="hidden">
+                      {/* ... (Print template content same as before) ... */}
+                      <div className="border-2 border-black p-8 font-sans max-w-3xl mx-auto">
                         <div className="flex justify-between border-b-2 border-black pb-4 mb-6">
                             <div>
                                 <h1 className="text-4xl font-extrabold uppercase tracking-wider">Pedido #{order.displayId}</h1>
@@ -363,28 +367,27 @@ const AdminOrderList: React.FC = () => {
                             <div>_______________________________<br/>Assinatura Cliente</div>
                         </div>
                     </div>
-                  </div>
-                  {/* End Print Template */}
-
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          )}
+        </div>
       </div>
 
-      {/* Aggregation Modal (Production List) */}
+      {/* Aggregation Modal */}
       {showAggregation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print p-2 md:p-4">
           <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
-            <div className="p-6 border-b flex justify-between items-center bg-purple-50">
+            <div className="p-4 md:p-6 border-b flex justify-between items-center bg-purple-50">
               <div>
-                <h2 className="text-xl font-bold text-purple-900 flex items-center">
+                <h2 className="text-lg md:text-xl font-bold text-purple-900 flex items-center">
                   <Calculator className="w-5 h-5 mr-2" /> Resumo de Produção
                 </h2>
-                <p className="text-sm text-purple-600 mt-1">
-                  Consolidado de {selectedOrderIds.size} pedidos selecionados ({startDate ? `De ${new Date(startDate).toLocaleDateString()}` : 'Início'} até {endDate ? new Date(endDate).toLocaleDateString() : 'Hoje'})
+                <p className="text-xs md:text-sm text-purple-600 mt-1">
+                  {selectedOrderIds.size} pedidos selecionados
                 </p>
               </div>
               <button onClick={() => setShowAggregation(false)} className="p-2 hover:bg-purple-100 rounded-full">
@@ -392,8 +395,8 @@ const AdminOrderList: React.FC = () => {
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1">
-              <table className="w-full text-sm border-collapse border border-gray-300">
+            <div className="p-4 md:p-6 overflow-y-auto flex-1 overflow-x-auto">
+              <table className="w-full text-sm border-collapse border border-gray-300 min-w-[700px]">
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="border p-2 text-left">Ref</th>
@@ -418,7 +421,7 @@ const AdminOrderList: React.FC = () => {
                 </tbody>
                 <tfoot className="bg-purple-50 font-bold text-purple-900">
                     <tr>
-                        <td colSpan={2} className="border p-3 text-right">TOTAL GERAL:</td>
+                        <td colSpan={2} className="border p-3 text-right">TOTAL:</td>
                         {ALL_SIZES.map(s => {
                             const colTotal = aggregatedItems.reduce((acc, i) => acc + (i.sizes[s] || 0), 0);
                             return <td key={s} className="border p-3 text-center">{colTotal || ''}</td>
@@ -431,12 +434,12 @@ const AdminOrderList: React.FC = () => {
               </table>
             </div>
 
-            <div className="p-6 border-t bg-gray-50 flex justify-end">
+            <div className="p-4 md:p-6 border-t bg-gray-50 flex justify-end">
                <button 
                  onClick={handlePrintAggregation}
-                 className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 flex items-center shadow-lg transform active:scale-95 transition"
+                 className="bg-blue-600 text-white px-6 py-3 md:py-2 rounded hover:bg-blue-700 flex items-center shadow-lg w-full md:w-auto justify-center"
                >
-                 <Printer className="w-5 h-5 mr-2" /> Imprimir Lista de Produção
+                 <Printer className="w-5 h-5 mr-2" /> Imprimir Lista
                </button>
             </div>
           </div>

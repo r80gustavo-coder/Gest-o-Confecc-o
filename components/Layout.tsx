@@ -67,17 +67,17 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
       </aside>
 
       {/* Mobile Header */}
-      <div className="md:hidden fixed w-full bg-white z-20 border-b flex justify-between items-center p-4 no-print">
-        <h1 className="font-bold text-blue-800">Confecção Pro</h1>
-        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-          {mobileMenuOpen ? <X /> : <Menu />}
+      <div className="md:hidden fixed w-full bg-white z-20 border-b flex justify-between items-center p-4 shadow-sm no-print">
+        <h1 className="font-bold text-blue-800 text-lg">Confecção Pro</h1>
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">
+          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
       </div>
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-10 bg-white pt-16 px-4 no-print">
-           <nav className="flex flex-col">
+        <div className="md:hidden fixed inset-0 z-10 bg-white pt-20 px-4 no-print animate-fade-in">
+           <nav className="flex flex-col space-y-2">
             {isAdmin ? (
               <>
                 <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
@@ -92,18 +92,20 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
                 <NavItem id="clients" icon={Users} label="Meus Clientes" />
               </>
             )}
-            <button 
-              onClick={onLogout}
-              className="flex items-center text-red-600 mt-8 px-4 py-3"
-            >
-              <LogOut className="w-5 h-5 mr-3" /> Sair
-            </button>
+            <div className="border-t pt-4 mt-4">
+                <button 
+                onClick={onLogout}
+                className="flex items-center text-red-600 w-full px-4 py-3 bg-red-50 rounded-lg"
+                >
+                <LogOut className="w-5 h-5 mr-3" /> Sair
+                </button>
+            </div>
           </nav>
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 pt-20 md:pt-8 overflow-x-hidden">
+      {/* Main Content - Adjusted padding for mobile */}
+      <main className="flex-1 md:ml-64 p-3 md:p-8 pt-20 md:pt-8 overflow-x-hidden w-full">
         {children}
       </main>
     </div>
