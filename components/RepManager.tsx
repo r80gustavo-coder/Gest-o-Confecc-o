@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
-import { getUsers, addUser, deleteUser, generateUUID } from '../services/storageService';
+import { getUsers, addUser, deleteUser } from '../services/storageService';
 import { Trash, Plus, UserPlus, Shield, Loader2 } from 'lucide-react';
 
 const RepManager: React.FC = () => {
@@ -13,12 +12,8 @@ const RepManager: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    try {
-      const data = await getUsers();
-      setUsers(data);
-    } catch (e) {
-      console.error(e);
-    }
+    const data = await getUsers();
+    setUsers(data);
     setLoading(false);
   };
 
@@ -28,44 +23,30 @@ const RepManager: React.FC = () => {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (users.find(u => u.username === username)) {
-        alert('Este usuário já existe (login duplicado).');
+        alert('Este usuário já existe.');
         return;
     }
 
     setLoading(true);
-    try {
-      await addUser({
-          id: generateUUID(),
-          name,
-          username,
-          password,
-          role: Role.REP
-      });
-      await fetchData();
-      setName('');
-      setUsername('');
-      setPassword('');
-    } catch (error: any) {
-      console.error(error);
-      alert(`Erro ao cadastrar representante: ${error.message || 'Erro desconhecido'}. \n\nVerifique se as Políticas (RLS) do Supabase permitem inserção.`);
-    } finally {
-      setLoading(false);
-    }
+    await addUser({
+        id: crypto.randomUUID(),
+        name,
+        username,
+        password,
+        role: Role.REP
+    });
+    await fetchData();
+    setName('');
+    setUsername('');
+    setPassword('');
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('Tem certeza que deseja remover este representante?')) {
         setLoading(true);
-        try {
-          await deleteUser(id);
-          await fetchData();
-        } catch (error: any) {
-          alert(`Erro ao excluir: ${error.message}`);
-        } finally {
-          setLoading(false);
-        }
+        await deleteUser(id);
+        await fetchData();
     }
   };
 

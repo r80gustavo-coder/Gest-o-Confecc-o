@@ -2,23 +2,6 @@
 import { User, ProductDef, Order, Client, Role, RepPrice } from '../types';
 import { supabase } from './supabaseClient';
 
-// --- UTILS ---
-export const generateUUID = () => {
-  // Tenta usar crypto nativo se disponível e seguro
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    try {
-      return crypto.randomUUID();
-    } catch (e) {
-      // Falha silenciosa, usa fallback
-    }
-  }
-  // Fallback compatível com todos os navegadores
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
-
 // --- USERS ---
 export const getUsers = async (): Promise<User[]> => {
   const { data, error } = await supabase.from('users').select('*');

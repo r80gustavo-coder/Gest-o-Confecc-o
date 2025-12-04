@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { ProductDef, SizeGridType } from '../types';
-import { getProducts, addProduct, deleteProduct, generateUUID } from '../services/storageService';
+import { getProducts, addProduct, deleteProduct } from '../services/storageService';
 import { Trash, Plus, Shirt, Loader2 } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
@@ -43,20 +42,16 @@ const ProductManager: React.FC = () => {
         return;
     }
 
-    try {
-      await addProduct({
-          id: generateUUID(),
-          reference: newRef.toUpperCase(),
-          color: newColor.toUpperCase(),
-          gridType: newGrid
-      });
+    await addProduct({
+        id: crypto.randomUUID(),
+        reference: newRef.toUpperCase(),
+        color: newColor.toUpperCase(),
+        gridType: newGrid
+    });
 
-      await fetchData();
-      setNewColor(''); // Keep Ref for faster entry
-      // setNewRef(''); 
-    } catch (e: any) {
-       setError("Erro ao salvar produto: " + e.message);
-    }
+    await fetchData();
+    setNewColor(''); // Keep Ref for faster entry
+    // setNewRef(''); 
   };
 
   const handleDelete = async (id: string) => {

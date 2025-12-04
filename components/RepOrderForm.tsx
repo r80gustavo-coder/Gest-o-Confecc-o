@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
-import { getProducts, getClients, addOrder, getRepPrices, generateUUID } from '../services/storageService';
+import { getProducts, getClients, addOrder, getRepPrices } from '../services/storageService';
 import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, Tag } from 'lucide-react';
 
 interface Props {
@@ -182,7 +182,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
     setLoading(true);
     await addOrder({
-      id: generateUUID(),
+      id: crypto.randomUUID(),
       repId: user.id,
       repName: user.name,
       clientId: client.id,

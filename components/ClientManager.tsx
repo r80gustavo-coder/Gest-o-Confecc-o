@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, Client } from '../types';
-import { getClients, addClient, updateClient, deleteClient, generateUUID } from '../services/storageService';
+import { getClients, addClient, updateClient, deleteClient } from '../services/storageService';
 import { Plus, MapPin, Store, Edit2, Trash, Save, X, Loader2, AlertCircle } from 'lucide-react';
 
 interface Props {
@@ -20,12 +19,8 @@ const ClientManager: React.FC<Props> = ({ user }) => {
 
   const fetchClients = async () => {
     setLoading(true);
-    try {
-      const data = await getClients(user.id);
-      setClients(data);
-    } catch (e) {
-      console.error(e);
-    }
+    const data = await getClients(user.id);
+    setClients(data);
     setLoading(false);
   };
 
@@ -50,7 +45,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
       } else {
           // Create new
           await addClient({
-              id: generateUUID(),
+              id: crypto.randomUUID(),
               repId: user.id,
               ...form
           });
@@ -59,7 +54,7 @@ const ClientManager: React.FC<Props> = ({ user }) => {
       setForm({ name: '', city: '', neighborhood: '', state: '' });
     } catch (error: any) {
       console.error("Erro ao salvar:", error);
-      setErrorMsg(`Erro ao salvar: ${error.message || 'Falha na conexão'}. Verifique as permissões do banco.`);
+      setErrorMsg("Erro ao salvar dados. Verifique a conexão.");
     } finally {
       setLoading(false);
     }
