@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
-import { getUsers, addUser, deleteUser } from '../services/storageService';
+import { getUsers, addUser, deleteUser, generateUUID } from '../services/storageService';
 import { Trash, Plus, UserPlus, Shield, Loader2 } from 'lucide-react';
 
 const RepManager: React.FC = () => {
@@ -29,17 +30,23 @@ const RepManager: React.FC = () => {
     }
 
     setLoading(true);
-    await addUser({
-        id: crypto.randomUUID(),
-        name,
-        username,
-        password,
-        role: Role.REP
-    });
-    await fetchData();
-    setName('');
-    setUsername('');
-    setPassword('');
+    try {
+        await addUser({
+            id: generateUUID(),
+            name,
+            username,
+            password,
+            role: Role.REP
+        });
+        await fetchData();
+        setName('');
+        setUsername('');
+        setPassword('');
+    } catch (e: any) {
+        alert('Erro ao cadastrar: ' + e.message);
+    } finally {
+        setLoading(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -47,6 +54,7 @@ const RepManager: React.FC = () => {
         setLoading(true);
         await deleteUser(id);
         await fetchData();
+        setLoading(false);
     }
   };
 
