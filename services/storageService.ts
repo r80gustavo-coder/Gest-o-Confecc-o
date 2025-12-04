@@ -46,11 +46,25 @@ export const getProducts = async (): Promise<ProductDef[]> => {
     console.error(error); 
     return []; 
   }
-  return (data || []) as ProductDef[];
+  // Mapeamento snake_case (banco) -> camelCase (app)
+  return data?.map((p: any) => ({
+    id: p.id,
+    reference: p.reference,
+    color: p.color,
+    gridType: p.grid_type || p.gridType // Garante a leitura correta da coluna grid_type
+  })) as ProductDef[] || [];
 };
 
 export const addProduct = async (prod: ProductDef): Promise<void> => {
-  const { error } = await supabase.from('products').insert(prod);
+  // Mapeamento camelCase (app) -> snake_case (banco)
+  const dbProd = {
+    id: prod.id,
+    reference: prod.reference,
+    color: prod.color,
+    grid_type: prod.gridType // Correção do nome da coluna
+  };
+
+  const { error } = await supabase.from('products').insert(dbProd);
   if (error) throw error;
 };
 
@@ -104,7 +118,6 @@ export const upsertRepPrice = async (priceData: RepPrice): Promise<void> => {
 export const getClients = async (repId?: string): Promise<Client[]> => {
   let query = supabase.from('clients').select('*');
   
-  // FIX: Mapeia repId do código para rep_id do banco
   if (repId) {
     query = query.eq('rep_id', repId);
   }
@@ -115,10 +128,9 @@ export const getClients = async (repId?: string): Promise<Client[]> => {
     return []; 
   }
   
-  // Mapeia snake_case (banco) para camelCase (app)
   return data?.map((row: any) => ({
     id: row.id,
-    repId: row.rep_id, // snake_case -> camelCase
+    repId: row.rep_id,
     name: row.name,
     city: row.city,
     neighborhood: row.neighborhood,
@@ -127,7 +139,6 @@ export const getClients = async (repId?: string): Promise<Client[]> => {
 };
 
 export const addClient = async (client: Client): Promise<void> => {
-  // Mapeia camelCase (app) para snake_case (banco)
   const dbClient = {
     id: client.id,
     rep_id: client.repId,
@@ -170,7 +181,6 @@ export const getOrders = async (): Promise<Order[]> => {
     return []; 
   }
 
-  // Mapeamento robusto para Pedidos
   return data?.map((row: any) => ({
     ...row,
     displayId: row.display_id || row.displayId,
@@ -194,7 +204,6 @@ export const getOrders = async (): Promise<Order[]> => {
 export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order | null> => {
   let newSeq = 1000;
 
-  // Lógica de sequência tolerante a falhas
   try {
     const { data: seqData, error: seqError } = await supabase
       .from('app_config')
@@ -205,25 +214,20 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
     if (!seqError && seqData) {
       const currentSeq = seqData.value;
       newSeq = currentSeq + 1;
-      // Tenta atualizar, mas não bloqueia se falhar
       await supabase.from('app_config').upsert({ key: 'order_seq', value: newSeq });
     } else if (!seqError && !seqData) {
-      // Se não existir, tenta criar
       await supabase.from('app_config').insert({ key: 'order_seq', value: 1001 });
       newSeq = 1001;
     } else {
-       // Se der erro (tabela não existe), usa timestamp
        throw new Error("Table config missing");
     }
   } catch (err) {
-    // Fallback silencioso para Timestamp se a tabela de config não existir
     console.warn("Usando fallback de ID para pedido.");
     newSeq = Math.floor(Date.now() / 1000) % 100000;
   }
 
   const orderWithSeq = { ...order, displayId: newSeq };
 
-  // Mapeia para snake_case antes de salvar
   const dbOrder = {
     id: orderWithSeq.id,
     display_id: orderWithSeq.displayId,
@@ -237,7 +241,7 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
     delivery_date: orderWithSeq.deliveryDate,
     payment_method: orderWithSeq.paymentMethod,
     status: orderWithSeq.status,
-    items: orderWithSeq.items, // JSONB geralmente mantém estrutura
+    items: orderWithSeq.items,
     total_pieces: orderWithSeq.totalPieces,
     subtotal_value: orderWithSeq.subtotalValue,
     discount_type: orderWithSeq.discountType,
@@ -249,7 +253,6 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
   
   if (error) {
     console.error("Erro ao criar pedido (Supabase):", error);
-    // Propaga o erro para o componente lidar
     throw new Error(error.message || "Erro desconhecido ao salvar no banco");
   }
   return orderWithSeq as Order;
