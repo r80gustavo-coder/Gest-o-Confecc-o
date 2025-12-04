@@ -182,20 +182,11 @@ export const getOrders = async (): Promise<Order[]> => {
   }
 
   return data?.map((row: any) => {
-    // ESTRATÉGIA DE COMPATIBILIDADE:
-    // Verifica se os itens estão salvos no formato antigo (Array puro)
-    // ou no formato novo (Objeto com metadados de desconto)
+    // Robustez: Garante que items seja sempre um array, 
+    // mesmo se tiver salvo no formato antigo ou novo
     let items = row.items;
-    let discountType = row.discount_type || row.discountType || null;
-    let discountValue = row.discount_value || row.discountValue || 0;
-    let finalTotalValue = row.final_total_value || row.finalTotalValue || 0;
-
-    // Se 'items' não for array, assume que é nosso objeto wrapper com metadados
     if (items && !Array.isArray(items) && items.list) {
-        discountType = items.metadata?.discountType || null;
-        discountValue = items.metadata?.discountValue || 0;
-        finalTotalValue = items.metadata?.finalTotalValue || 0;
-        items = items.list; // Recupera a lista real de itens
+        items = items.list; 
     }
 
     return {
@@ -212,12 +203,13 @@ export const getOrders = async (): Promise<Order[]> => {
       deliveryDate: row.delivery_date || row.deliveryDate,
       paymentMethod: row.payment_method || row.paymentMethod,
       status: row.status,
-      items: Array.isArray(items) ? items : [], // Garante que retorne sempre array para o app
+      items: Array.isArray(items) ? items : [], 
       totalPieces: row.total_pieces || row.totalPieces,
-      subtotalValue: row.subtotal_value || row.subtotalValue,
-      discountType,
-      discountValue,
-      finalTotalValue: finalTotalValue || (row.subtotal_value || row.subtotalValue) // Fallback para subtotal se 0
+      // Mapeamento correto das colunas financeiras
+      subtotalValue: row.subtotal_value || row.subtotalValue || 0,
+      discountType: row.discount_type || row.discountType || null,
+      discountValue: row.discount_value || row.discountValue || 0,
+      finalTotalValue: row.final_total_value || row.finalTotalValue || 0
     };
   }) as Order[] || [];
 };
@@ -249,17 +241,6 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
 
   const orderWithSeq = { ...order, displayId: newSeq };
 
-  // FIX: Como o banco não tem as colunas 'discount_type' e 'final_total_value',
-  // guardamos esses dados dentro da coluna 'items' (que é JSON) como metadados.
-  const itemsPayload = {
-      list: orderWithSeq.items,
-      metadata: {
-          discountType: orderWithSeq.discountType,
-          discountValue: orderWithSeq.discountValue,
-          finalTotalValue: orderWithSeq.finalTotalValue
-      }
-  };
-
   const dbOrder = {
     id: orderWithSeq.id,
     display_id: orderWithSeq.displayId,
@@ -273,13 +254,13 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
     delivery_date: orderWithSeq.deliveryDate,
     payment_method: orderWithSeq.paymentMethod,
     status: orderWithSeq.status,
-    items: itemsPayload, // Enviando Objeto JSON em vez de Array simples
+    items: orderWithSeq.items, // Salva items normalmente como JSON
     total_pieces: orderWithSeq.totalPieces,
+    // Agora usando as colunas reais
     subtotal_value: orderWithSeq.subtotalValue,
-    // REMOVIDO: Campos que causam erro de coluna inexistente
-    // discount_type: ..., 
-    // discount_value: ..., 
-    // final_total_value: ...
+    discount_type: orderWithSeq.discountType,
+    discount_value: orderWithSeq.discountValue,
+    final_total_value: orderWithSeq.finalTotalValue
   };
 
   const { error } = await supabase.from('orders').insert(dbOrder);
