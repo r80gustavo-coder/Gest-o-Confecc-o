@@ -1,17 +1,34 @@
 import { GoogleGenAI } from "@google/genai";
 import { Order } from "../types";
 
-// NOTE: In a real app, API keys should not be exposed on the client side.
-// Since this is a requested purely frontend demo, we assume the environment variable or a safe context.
-// However, the prompt specifically says process.env.API_KEY is available.
+// Helper seguro para recuperar a API Key sem quebrar o app no navegador
+const getApiKey = () => {
+  try {
+    // Verifica process.env de forma segura
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+    // Verifica import.meta.env (Padrão Vite) de forma segura
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_API_KEY;
+    }
+  } catch (e) {
+    console.warn("Erro ao ler variáveis de ambiente", e);
+  }
+  return '';
+};
 
 export const generateSalesAnalysis = async (orders: Order[]) => {
   try {
-    if (!process.env.API_KEY) {
-      throw new Error("API Key not found");
+    const apiKey = getApiKey();
+
+    if (!apiKey) {
+      throw new Error("API Key não encontrada. Configure a variável API_KEY ou VITE_API_KEY.");
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
     
     // Prepare data summary for the AI to minimize token usage
     const summary = orders.map(o => ({
