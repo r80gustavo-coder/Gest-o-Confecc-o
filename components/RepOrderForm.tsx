@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, getClients, addOrder, getRepPrices, generateUUID } from '../services/storageService';
-import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, Tag } from 'lucide-react';
+import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, Tag, AlertTriangle } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -14,6 +14,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [priceMap, setPriceMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   // Form State
   const [selectedClientId, setSelectedClientId] = useState('');
@@ -43,20 +44,24 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   useEffect(() => {
     const loadData = async () => {
         setLoading(true);
-        const [p, c, prices] = await Promise.all([
-          getProducts(), 
-          getClients(user.id),
-          getRepPrices(user.id)
-        ]);
-        setProducts(p);
-        setClients(c);
-        
-        // Mapeia preços para busca rápida
-        const pm: Record<string, number> = {};
-        prices.forEach(pr => pm[pr.reference] = pr.price);
-        setPriceMap(pm);
-
-        setLoading(false);
+        try {
+          const [p, c, prices] = await Promise.all([
+            getProducts(), 
+            getClients(user.id),
+            getRepPrices(user.id)
+          ]);
+          setProducts(p);
+          setClients(c);
+          
+          // Mapeia preços para busca rápida
+          const pm: Record<string, number> = {};
+          prices.forEach(pr => pm[pr.reference] = pr.price);
+          setPriceMap(pm);
+        } catch (e) {
+          console.error("Erro ao carregar dados iniciais", e);
+        } finally {
+          setLoading(false);
+        }
     };
     loadData();
   }, [user.id]);
@@ -85,6 +90,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(''); // Limpa erros anteriores
     if (!currentRef || !currentColor) return;
 
     const sizesNum: {[key: string]: number} = {};
@@ -97,7 +103,10 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       }
     });
 
-    if (total === 0) return;
+    if (total === 0) {
+        setErrorMsg('Adicione quantidade em pelo menos um tamanho.');
+        return;
+    }
 
     const finalUnitPrice = parseFloat(manualUnitPrice) || 0;
 
@@ -175,34 +184,47 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   if (finalTotalValue < 0) finalTotalValue = 0;
 
   const handleSaveOrder = async () => {
-    if (!selectedClientId || items.length === 0) return;
+    if (!selectedClientId || items.length === 0) {
+        setErrorMsg('Selecione um cliente e adicione pelo menos um item.');
+        return;
+    }
 
     const client = clients.find(c => c.id === selectedClientId);
     if (!client) return;
 
     setLoading(true);
-    await addOrder({
-      id: generateUUID(),
-      repId: user.id,
-      repName: user.name,
-      clientId: client.id,
-      clientName: client.name,
-      clientCity: client.city,
-      clientState: client.state,
-      createdAt: new Date().toISOString(),
-      deliveryDate,
-      paymentMethod,
-      status: 'open',
-      items,
-      totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0),
-      subtotalValue,
-      discountType: discountType || null,
-      discountValue: distValNum,
-      finalTotalValue
-    });
-    setLoading(false);
+    setErrorMsg('');
 
-    onOrderCreated();
+    try {
+        await addOrder({
+            id: generateUUID(),
+            repId: user.id,
+            repName: user.name,
+            clientId: client.id,
+            clientName: client.name,
+            clientCity: client.city,
+            clientState: client.state,
+            createdAt: new Date().toISOString(),
+            deliveryDate,
+            paymentMethod,
+            status: 'open',
+            items,
+            totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0),
+            subtotalValue,
+            discountType: discountType || null,
+            discountValue: distValNum,
+            finalTotalValue
+        });
+        // Sucesso
+        onOrderCreated();
+    } catch (error: any) {
+        console.error("Erro ao salvar pedido:", error);
+        // Exibe erro amigável ou o erro técnico do Supabase
+        setErrorMsg(`Não foi possível salvar o pedido. Detalhes: ${error.message || error.toString()}`);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } finally {
+        setLoading(false);
+    }
   };
 
   const uniqueRefs = [...new Set(products.map(p => p.reference))];
@@ -218,13 +240,20 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         {editingIndex !== null && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">Modo Edição</span>}
       </h2>
 
+      {errorMsg && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 p-3 rounded flex items-start">
+            <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+            <span>{errorMsg}</span>
+        </div>
+      )}
+
       {/* HEADER: Client Info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 pb-6 border-b">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
           <div className="relative">
             <select 
-                className="w-full border rounded p-2 pr-8 appearance-none bg-white"
+                className="w-full border rounded p-2 pr-8 appearance-none bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                 value={selectedClientId}
                 onChange={(e) => setSelectedClientId(e.target.value)}
             >
@@ -241,7 +270,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Data Entrega</label>
             <input 
                 type="date" 
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
                 value={deliveryDate}
                 onChange={(e) => setDeliveryDate(e.target.value)}
             />
@@ -250,7 +279,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
             <input 
                 type="text" 
-                className="w-full border rounded p-2"
+                className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
                 placeholder="Ex: 30/60 dias"
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
@@ -521,11 +550,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       )}
 
       {/* Footer Save Button */}
-      <div className="fixed bottom-0 left-0 w-full p-4 bg-white border-t md:static md:bg-transparent md:border-0 md:p-0 md:mt-6 z-10 flex justify-end">
+      <div className="fixed bottom-0 left-0 w-full p-4 bg-white border-t md:static md:bg-transparent md:border-0 md:p-0 md:mt-6 z-10 flex justify-end shadow-up md:shadow-none">
         <button 
           onClick={handleSaveOrder}
           disabled={items.length === 0 || !selectedClientId || editingIndex !== null || loading}
-          className="w-full md:w-auto bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 shadow-md flex items-center justify-center font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full md:w-auto bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 shadow-md flex items-center justify-center font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
           {loading ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : <Check className="w-5 h-5 mr-2" />}
           {editingIndex !== null ? 'Salve a Edição' : `Finalizar (R$ ${finalTotalValue.toFixed(2)})`}

@@ -194,18 +194,30 @@ export const getOrders = async (): Promise<Order[]> => {
 export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order | null> => {
   let newSeq = 1000;
 
+  // Lógica de sequência tolerante a falhas
   try {
-    const { data: seqData, error: seqError } = await supabase.from('app_config').select('value').eq('key', 'order_seq').maybeSingle();
+    const { data: seqData, error: seqError } = await supabase
+      .from('app_config')
+      .select('value')
+      .eq('key', 'order_seq')
+      .maybeSingle();
     
-    if (!seqError) {
-      const currentSeq = seqData?.value || 1000;
+    if (!seqError && seqData) {
+      const currentSeq = seqData.value;
       newSeq = currentSeq + 1;
+      // Tenta atualizar, mas não bloqueia se falhar
       await supabase.from('app_config').upsert({ key: 'order_seq', value: newSeq });
+    } else if (!seqError && !seqData) {
+      // Se não existir, tenta criar
+      await supabase.from('app_config').insert({ key: 'order_seq', value: 1001 });
+      newSeq = 1001;
     } else {
-        newSeq = Math.floor(Date.now() / 1000) % 100000;
+       // Se der erro (tabela não existe), usa timestamp
+       throw new Error("Table config missing");
     }
   } catch (err) {
-    console.warn("Tabela app_config não encontrada. Usando ID baseado em timestamp.");
+    // Fallback silencioso para Timestamp se a tabela de config não existir
+    console.warn("Usando fallback de ID para pedido.");
     newSeq = Math.floor(Date.now() / 1000) % 100000;
   }
 
@@ -236,8 +248,9 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
   const { error } = await supabase.from('orders').insert(dbOrder);
   
   if (error) {
-    console.error("Erro ao criar pedido:", error);
-    throw error;
+    console.error("Erro ao criar pedido (Supabase):", error);
+    // Propaga o erro para o componente lidar
+    throw new Error(error.message || "Erro desconhecido ao salvar no banco");
   }
   return orderWithSeq as Order;
 };
