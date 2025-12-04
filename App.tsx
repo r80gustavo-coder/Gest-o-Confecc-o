@@ -39,6 +39,7 @@ const App: React.FC = () => {
   const handleLogin = (u: User) => {
     setUser(u);
     localStorage.setItem('current_user', JSON.stringify(u));
+    // Redireciona para o dashboard correto baseado no papel
     setActiveTab(u.role === Role.ADMIN ? 'dashboard' : 'rep-dashboard');
   };
 
@@ -54,6 +55,7 @@ const App: React.FC = () => {
 
   return (
     <Layout user={user} onLogout={handleLogout} activeTab={activeTab} setActiveTab={setActiveTab}>
+      {/* Rotas de Administrador */}
       {user.role === Role.ADMIN && (
         <>
           {activeTab === 'dashboard' && <AdminDashboard onNavigate={setActiveTab} />}
@@ -63,6 +65,7 @@ const App: React.FC = () => {
         </>
       )}
 
+      {/* Rotas de Representante */}
       {user.role === Role.REP && (
         <>
           {activeTab === 'rep-dashboard' && <RepOrderList user={user} />}
