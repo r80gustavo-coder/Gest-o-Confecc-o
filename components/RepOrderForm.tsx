@@ -79,6 +79,8 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         if (prod) setCurrentGrid(prod.gridType);
         
         // AUTO-PREENCHIMENTO DO PREÇO
+        // Se já tiver um preço digitado manualmente, não sobrescreve, 
+        // a menos que o campo esteja vazio ou a referência mudou drasticamente (que é coberto pelo if currentRef)
         const configPrice = priceMap[currentRef] || 0;
         setManualUnitPrice(configPrice > 0 ? configPrice.toFixed(2) : '');
       }
@@ -124,17 +126,20 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       const updatedItems = [...items];
       updatedItems[editingIndex] = newItem;
       setItems(updatedItems);
+      
+      // Se estava editando, limpa tudo ao terminar
       setEditingIndex(null);
+      setCurrentRef('');
+      setManualUnitPrice('');
     } else {
       setItems([...items, newItem]);
+      // Se está ADICIONANDO NOVO:
+      // Mantém currentRef e manualUnitPrice para facilitar inserção de outra cor
     }
     
+    // Limpa apenas a cor e tamanhos para o próximo item
     setQuickSizes({});
     setCurrentColor('');
-    setManualUnitPrice('');
-    if (editingIndex !== null) {
-      setCurrentRef('');
-    }
   };
 
   const startEditItem = (index: number) => {
