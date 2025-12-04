@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, RepPrice } from '../types';
 import { getProducts, getRepPrices, upsertRepPrice } from '../services/storageService';
-import { Loader2, DollarSign, Save, Search, AlertCircle } from 'lucide-react';
+import { Loader2, DollarSign, Save, Search, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -83,23 +83,28 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
           <p className="text-sm text-gray-500">Defina o preço de venda para cada referência.</p>
         </div>
         
-        <div className="relative w-full md:w-64">
-           <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-           <input 
-             type="text" 
-             placeholder="Buscar referência..." 
-             className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-             value={searchTerm}
-             onChange={e => setSearchTerm(e.target.value)}
-           />
+        <div className="flex items-center gap-2 w-full md:w-auto">
+             <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                <input 
+                    type="text" 
+                    placeholder="Buscar referência..." 
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                />
+             </div>
+             <button onClick={loadData} className="p-2 bg-white border rounded hover:bg-gray-50" title="Recarregar">
+                <RefreshCw className="w-5 h-5 text-gray-500" />
+             </button>
         </div>
       </div>
 
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800">
-          <p className="font-bold">Como funciona:</p>
-          <p>Os preços são salvos individualmente por referência. Ao fazer um pedido, o sistema puxará automaticamente o valor definido aqui. Se deixar zerado, o pedido sairá com valor R$ 0,00.</p>
+          <p className="font-bold">Como salvar:</p>
+          <p>Digite o valor e clique fora do campo ou aperte TAB para salvar automaticamente. Você também pode clicar no botão de disquete ao lado.</p>
         </div>
       </div>
 
@@ -110,7 +115,7 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
               <tr>
                 <th className="p-4">Referência</th>
                 <th className="p-4 w-48">Preço Unitário (R$)</th>
-                <th className="p-4 w-24 text-center">Ação</th>
+                <th className="p-4 w-24 text-center">Salvar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -124,10 +129,10 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
                         type="number" 
                         step="0.01"
                         min="0"
-                        className="w-full pl-8 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                        className="w-full pl-8 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700"
                         value={prices[ref] || ''}
                         onChange={(e) => handlePriceChange(ref, e.target.value)}
-                        onBlur={() => savePrice(ref)} // Auto-save on blur implies user finished typing
+                        onBlur={() => savePrice(ref)} 
                         placeholder="0.00"
                       />
                     </div>
@@ -135,7 +140,7 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
                   <td className="p-4 text-center">
                     <button 
                       onClick={() => savePrice(ref)}
-                      className="p-2 text-blue-600 hover:bg-blue-100 rounded-full transition"
+                      className={`p-2 rounded-full transition ${savingRef === ref ? 'text-green-600 bg-green-50' : 'text-blue-600 hover:bg-blue-100'}`}
                       title="Salvar Preço"
                     >
                       {savingRef === ref ? (
@@ -149,8 +154,9 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
               ))}
               {filteredRefs.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="p-8 text-center text-gray-400">
-                    Nenhuma referência encontrada.
+                  <td colSpan={3} className="p-12 text-center text-gray-500">
+                    <p className="font-bold mb-2">Nenhum produto encontrado.</p>
+                    <p className="text-sm">Peça ao administrador para cadastrar referências no "Catálogo de Produtos" primeiro.</p>
                   </td>
                 </tr>
               )}

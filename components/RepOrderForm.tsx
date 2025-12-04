@@ -2,14 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, getClients, addOrder, getRepPrices } from '../services/storageService';
-import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator } from 'lucide-react';
+import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, AlertTriangle } from 'lucide-react';
 
 interface Props {
   user: User;
   onOrderCreated: () => void;
 }
-
-const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [products, setProducts] = useState<ProductDef[]>([]);
@@ -271,10 +269,20 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                 <datalist id="refs">
                 {uniqueRefs.map(r => <option key={r} value={r} />)}
                 </datalist>
+                
                 {currentRef && (
-                  <div className="text-xs mt-1 text-blue-700 font-bold flex items-center">
-                    <DollarSign className="w-3 h-3 mr-0.5" />
-                    Preço Unit: R$ {currentUnitPrice.toFixed(2)}
+                  <div className={`text-xs mt-1 font-bold flex items-center ${currentUnitPrice > 0 ? 'text-blue-700' : 'text-red-600'}`}>
+                    {currentUnitPrice > 0 ? (
+                      <>
+                        <DollarSign className="w-3 h-3 mr-0.5" />
+                        Preço Unit: R$ {currentUnitPrice.toFixed(2)}
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        Sem preço cadastrado! (R$ 0,00)
+                      </>
+                    )}
                   </div>
                 )}
             </div>
@@ -365,7 +373,56 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         <div className="mb-24">
             <h3 className="font-bold text-gray-700 mb-2 px-1">Itens Adicionados ({items.length})</h3>
             
-            <div className="space-y-3">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto border rounded-lg mb-4">
+              <table className="w-full text-left bg-white text-sm">
+                <thead className="bg-gray-100 text-gray-700 font-bold border-b">
+                  <tr>
+                    <th className="p-3">Ref / Cor</th>
+                    <th className="p-3 text-center">Grade</th>
+                    <th className="p-3 text-right">Qtd</th>
+                    <th className="p-3 text-right">Preço Unit.</th>
+                    <th className="p-3 text-right">Total</th>
+                    <th className="p-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {items.map((item, idx) => (
+                    <tr key={idx} className={`hover:bg-gray-50 ${editingIndex === idx ? 'bg-orange-50' : ''}`}>
+                      <td className="p-3">
+                        <span className="block font-bold text-gray-800">{item.reference}</span>
+                        <span className="text-xs uppercase text-gray-500">{item.color}</span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex justify-center gap-1 flex-wrap">
+                          {Object.entries(item.sizes).map(([size, qty]) => (
+                             <span key={size} className="bg-gray-100 px-1.5 py-0.5 rounded text-xs border border-gray-200">
+                                <b className="text-gray-500">{size}:</b> {qty}
+                             </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3 text-right font-bold text-gray-700">{item.totalQty}</td>
+                      <td className="p-3 text-right text-gray-600">R$ {item.unitPrice.toFixed(2)}</td>
+                      <td className="p-3 text-right font-bold text-green-700">R$ {item.totalItemValue.toFixed(2)}</td>
+                      <td className="p-3 text-center">
+                         <div className="flex justify-center gap-2">
+                             <button onClick={() => startEditItem(idx)} className="text-blue-600 hover:text-blue-800 p-1" title="Editar">
+                                <Edit2 className="w-4 h-4" />
+                             </button>
+                             <button onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 p-1" title="Remover">
+                                <Trash className="w-4 h-4" />
+                             </button>
+                         </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
                 {items.map((item, idx) => (
                     <div key={idx} className={`bg-white border rounded-lg p-3 shadow-sm ${editingIndex === idx ? 'border-orange-400 ring-1 ring-orange-200' : 'border-gray-200'}`}>
                         <div className="flex justify-between items-start mb-2 border-b pb-2">
