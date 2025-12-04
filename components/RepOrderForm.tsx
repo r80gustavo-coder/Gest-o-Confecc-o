@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, getClients, addOrder, getRepPrices } from '../services/storageService';
-import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, AlertTriangle } from 'lucide-react';
+import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, Tag } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -20,7 +20,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   
-  // Discount State
+  // Descontos
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed' | ''>('');
   const [discountValue, setDiscountValue] = useState<string>('');
 
@@ -28,7 +28,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [currentRef, setCurrentRef] = useState('');
   const [currentColor, setCurrentColor] = useState('');
   const [currentGrid, setCurrentGrid] = useState<SizeGridType>(SizeGridType.ADULT);
-  const [manualUnitPrice, setManualUnitPrice] = useState<string>(''); // New state for editable price
+  const [manualUnitPrice, setManualUnitPrice] = useState<string>(''); // Preço editável
   
   // Editing State
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -51,7 +51,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         setProducts(p);
         setClients(c);
         
-        // Build efficient price lookup
+        // Mapeia preços para busca rápida
         const pm: Record<string, number> = {};
         prices.forEach(pr => pm[pr.reference] = pr.price);
         setPriceMap(pm);
@@ -61,6 +61,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     loadData();
   }, [user.id]);
 
+  // Quando a referência muda, busca cores e PREÇO da tabela
   useEffect(() => {
     if (currentRef) {
       const colors = products
@@ -72,7 +73,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         const prod = products.find(p => p.reference === currentRef);
         if (prod) setCurrentGrid(prod.gridType);
         
-        // Auto-fill price from config, but allow override
+        // AUTO-PREENCHIMENTO DO PREÇO
         const configPrice = priceMap[currentRef] || 0;
         setManualUnitPrice(configPrice > 0 ? configPrice.toFixed(2) : '');
       }
@@ -98,7 +99,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
     if (total === 0) return;
 
-    // Use manual price if set, otherwise 0
     const finalUnitPrice = parseFloat(manualUnitPrice) || 0;
 
     const newItem: OrderItem = {
@@ -159,19 +159,19 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     }
   };
 
-  // Calculations
+  // --- CÁLCULOS TOTAIS E DESCONTO ---
   const subtotalValue = items.reduce((acc, item) => acc + item.totalItemValue, 0);
   
-  let finalTotalValue = subtotalValue;
+  let discountAmount = 0;
   const distValNum = parseFloat(discountValue) || 0;
   
   if (discountType === 'percentage') {
-    finalTotalValue = subtotalValue - (subtotalValue * (distValNum / 100));
+    discountAmount = subtotalValue * (distValNum / 100);
   } else if (discountType === 'fixed') {
-    finalTotalValue = subtotalValue - distValNum;
+    discountAmount = distValNum;
   }
   
-  // Prevent negative total
+  let finalTotalValue = subtotalValue - discountAmount;
   if (finalTotalValue < 0) finalTotalValue = 0;
 
   const handleSaveOrder = async () => {
@@ -259,7 +259,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         </div>
       </div>
 
-      {/* INPUT AREA */}
+      {/* ÁREA DE ENTRADA DE ITENS */}
       <div className={`p-3 md:p-4 rounded-lg mb-6 border transition-colors ${editingIndex !== null ? 'bg-orange-50 border-orange-200' : 'bg-blue-50 border-blue-100'}`}>
         <form onSubmit={handleAddItem} className="flex flex-col gap-3">
           
@@ -280,7 +280,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                 </datalist>
             </div>
 
-            {/* Price Override */}
+            {/* PREÇO UNITÁRIO (CARREGADO DA TABELA OU EDITÁVEL) */}
              <div className="w-full md:w-32">
                 <label className="block text-xs font-bold text-gray-700 mb-1">Preço Unit. (R$)</label>
                 <div className="relative">
@@ -384,7 +384,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         <div className="mb-24">
             <h3 className="font-bold text-gray-700 mb-2 px-1">Itens Adicionados ({items.length})</h3>
             
-            {/* Desktop Table View */}
+            {/* Desktop Table View - COM COLUNA DE PREÇO */}
             <div className="hidden md:block overflow-x-auto border rounded-lg mb-4">
               <table className="w-full text-left bg-white text-sm">
                 <thead className="bg-gray-100 text-gray-700 font-bold border-b">
@@ -471,7 +471,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             </div>
 
             {/* FINANCIAL SUMMARY & DISCOUNT */}
-            <div className="mt-6 bg-gray-50 border rounded-xl p-4">
+            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
               <h4 className="font-bold text-gray-800 flex items-center mb-4">
                  <Calculator className="w-4 h-4 mr-2" /> Resumo Financeiro
               </h4>
@@ -481,11 +481,14 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                   <span className="font-medium">R$ {subtotalValue.toFixed(2)}</span>
               </div>
 
-              <div className="mb-4 pt-2 border-t border-gray-200">
-                 <label className="block text-xs font-bold text-gray-500 mb-1">Aplicar Desconto</label>
+              {/* OPÇÃO DE DESCONTO */}
+              <div className="mb-4 pt-4 border-t border-yellow-200">
+                 <label className="block text-xs font-bold text-gray-700 mb-2 flex items-center">
+                    <Tag className="w-3 h-3 mr-1" /> Aplicar Desconto
+                 </label>
                  <div className="flex gap-2">
                     <select 
-                      className="border rounded p-2 text-sm bg-white"
+                      className="border rounded p-2 text-sm bg-white flex-1"
                       value={discountType}
                       onChange={(e) => setDiscountType(e.target.value as any)}
                     >
@@ -496,17 +499,22 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                     <input 
                       type="number"
                       placeholder={discountType === 'percentage' ? "%" : "R$"}
-                      className="border rounded p-2 text-sm w-24"
+                      className="border rounded p-2 text-sm w-32"
                       value={discountValue}
                       onChange={(e) => setDiscountValue(e.target.value)}
                       disabled={!discountType}
                     />
                  </div>
+                 {discountAmount > 0 && (
+                     <div className="text-right text-red-600 text-sm mt-1 font-medium">
+                         - R$ {discountAmount.toFixed(2)}
+                     </div>
+                 )}
               </div>
 
-              <div className="pt-3 border-t-2 border-gray-200 flex justify-between items-center">
+              <div className="pt-3 border-t-2 border-yellow-300 flex justify-between items-center">
                   <span className="text-lg font-bold text-gray-800 uppercase">Total Final</span>
-                  <span className="text-2xl font-bold text-green-600">R$ {finalTotalValue.toFixed(2)}</span>
+                  <span className="text-3xl font-bold text-green-700">R$ {finalTotalValue.toFixed(2)}</span>
               </div>
             </div>
         </div>

@@ -25,8 +25,11 @@ const App: React.FC = () => {
         const parsedUser = JSON.parse(savedUser);
         if (parsedUser && parsedUser.id && parsedUser.role) {
             setUser(parsedUser);
+            // Se o usuário já estava logado como Rep, define uma aba padrão segura
+            if (parsedUser.role === Role.REP && activeTab === 'dashboard') {
+                setActiveTab('rep-dashboard');
+            }
         } else {
-            // Dados inválidos
             localStorage.removeItem('current_user');
         }
       } catch (e) {
@@ -39,7 +42,6 @@ const App: React.FC = () => {
   const handleLogin = (u: User) => {
     setUser(u);
     localStorage.setItem('current_user', JSON.stringify(u));
-    // Redireciona para o dashboard correto baseado no papel
     setActiveTab(u.role === Role.ADMIN ? 'dashboard' : 'rep-dashboard');
   };
 
@@ -71,6 +73,7 @@ const App: React.FC = () => {
           {activeTab === 'rep-dashboard' && <RepOrderList user={user} />}
           {activeTab === 'new-order' && <RepOrderForm user={user} onOrderCreated={() => setActiveTab('rep-dashboard')} />}
           {activeTab === 'clients' && <ClientManager user={user} />}
+          {/* Rota para Tabela de Preços */}
           {activeTab === 'prices' && <RepPriceManager user={user} />}
         </>
       )}

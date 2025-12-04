@@ -36,7 +36,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 fixed h-full z-10 no-print">
         <div className="p-6 border-b border-gray-100">
           <h1 className="text-xl font-bold text-blue-800">Confecção Pro</h1>
-          <p className="text-xs text-gray-500 mt-1">Bem-vindo, {user.name.split(' ')[0]}</p>
+          <p className="text-sm text-gray-500 mt-1 truncate">Olá, {user.name.split(' ')[0]}</p>
         </div>
         
         <nav className="flex-1 p-4 overflow-y-auto">
@@ -52,6 +52,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
               <NavItem id="rep-dashboard" icon={LayoutDashboard} label="Meus Pedidos" />
               <NavItem id="new-order" icon={ShoppingCart} label="Novo Pedido" />
               <NavItem id="clients" icon={Users} label="Meus Clientes" />
+              {/* ITEM TABELA DE PREÇOS ADICIONADO ABAIXO DE CLIENTES */}
               <NavItem id="prices" icon={DollarSign} label="Tabela de Preços" />
             </>
           )}
