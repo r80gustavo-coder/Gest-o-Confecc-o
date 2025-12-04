@@ -44,7 +44,7 @@ export const getProducts = async (): Promise<ProductDef[]> => {
   const { data, error } = await supabase.from('products').select('*');
   if (error) { 
     console.error(error); 
-    return []; // Retorna array vazio em caso de erro para não quebrar a UI
+    return []; 
   }
   return (data || []) as ProductDef[];
 };
@@ -75,7 +75,6 @@ export const getRepPrices = async (repId: string): Promise<RepPrice[]> => {
 };
 
 export const upsertRepPrice = async (priceData: RepPrice): Promise<void> => {
-  // Verifica se já existe para atualizar ou inserir
   const { data: existing } = await supabase
     .from('rep_prices')
     .select('id')
@@ -104,26 +103,56 @@ export const upsertRepPrice = async (priceData: RepPrice): Promise<void> => {
 // --- CLIENTS ---
 export const getClients = async (repId?: string): Promise<Client[]> => {
   let query = supabase.from('clients').select('*');
+  
+  // FIX: Mapeia repId do código para rep_id do banco
   if (repId) {
-    query = query.eq('repId', repId);
+    query = query.eq('rep_id', repId);
   }
+  
   const { data, error } = await query;
   if (error) { 
     console.error(error); 
     return []; 
   }
-  return (data || []) as Client[];
+  
+  // Mapeia snake_case (banco) para camelCase (app)
+  return data?.map((row: any) => ({
+    id: row.id,
+    repId: row.rep_id, // snake_case -> camelCase
+    name: row.name,
+    city: row.city,
+    neighborhood: row.neighborhood,
+    state: row.state
+  })) as Client[] || [];
 };
 
 export const addClient = async (client: Client): Promise<void> => {
-  const { error } = await supabase.from('clients').insert(client);
+  // Mapeia camelCase (app) para snake_case (banco)
+  const dbClient = {
+    id: client.id,
+    rep_id: client.repId,
+    name: client.name,
+    city: client.city,
+    neighborhood: client.neighborhood,
+    state: client.state
+  };
+
+  const { error } = await supabase.from('clients').insert(dbClient);
   if (error) throw error;
 };
 
 export const updateClient = async (updatedClient: Client): Promise<void> => {
+  const dbClient = {
+    rep_id: updatedClient.repId,
+    name: updatedClient.name,
+    city: updatedClient.city,
+    neighborhood: updatedClient.neighborhood,
+    state: updatedClient.state
+  };
+
   const { error } = await supabase
     .from('clients')
-    .update(updatedClient)
+    .update(dbClient)
     .eq('id', updatedClient.id);
   if (error) throw error;
 };
@@ -138,9 +167,28 @@ export const getOrders = async (): Promise<Order[]> => {
   const { data, error } = await supabase.from('orders').select('*');
   if (error) { 
     console.error("Erro ao buscar pedidos:", error); 
-    return []; // Importante: retorna array vazio se falhar ou se tabela não existir
+    return []; 
   }
-  return (data || []) as Order[];
+
+  // Mapeamento robusto para Pedidos
+  return data?.map((row: any) => ({
+    ...row,
+    displayId: row.display_id || row.displayId,
+    repId: row.rep_id || row.repId,
+    repName: row.rep_name || row.repName,
+    clientId: row.client_id || row.clientId,
+    clientName: row.client_name || row.clientName,
+    clientCity: row.client_city || row.clientCity,
+    clientState: row.client_state || row.clientState,
+    createdAt: row.created_at || row.createdAt,
+    deliveryDate: row.delivery_date || row.deliveryDate,
+    paymentMethod: row.payment_method || row.paymentMethod,
+    totalPieces: row.total_pieces || row.totalPieces,
+    subtotalValue: row.subtotal_value || row.subtotalValue,
+    discountType: row.discount_type || row.discountType,
+    discountValue: row.discount_value || row.discountValue,
+    finalTotalValue: row.final_total_value || row.finalTotalValue
+  })) as Order[] || [];
 };
 
 export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order | null> => {
@@ -161,14 +209,37 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
     newSeq = Math.floor(Date.now() / 1000) % 100000;
   }
 
-  const newOrder = { ...order, displayId: newSeq };
-  const { error } = await supabase.from('orders').insert(newOrder);
+  const orderWithSeq = { ...order, displayId: newSeq };
+
+  // Mapeia para snake_case antes de salvar
+  const dbOrder = {
+    id: orderWithSeq.id,
+    display_id: orderWithSeq.displayId,
+    rep_id: orderWithSeq.repId,
+    rep_name: orderWithSeq.repName,
+    client_id: orderWithSeq.clientId,
+    client_name: orderWithSeq.clientName,
+    client_city: orderWithSeq.clientCity,
+    client_state: orderWithSeq.clientState,
+    created_at: orderWithSeq.createdAt,
+    delivery_date: orderWithSeq.deliveryDate,
+    payment_method: orderWithSeq.paymentMethod,
+    status: orderWithSeq.status,
+    items: orderWithSeq.items, // JSONB geralmente mantém estrutura
+    total_pieces: orderWithSeq.totalPieces,
+    subtotal_value: orderWithSeq.subtotalValue,
+    discount_type: orderWithSeq.discountType,
+    discount_value: orderWithSeq.discountValue,
+    final_total_value: orderWithSeq.finalTotalValue
+  };
+
+  const { error } = await supabase.from('orders').insert(dbOrder);
   
   if (error) {
     console.error("Erro ao criar pedido:", error);
     throw error;
   }
-  return newOrder as Order;
+  return orderWithSeq as Order;
 };
 
 export const updateOrderStatus = async (id: string, status: 'open' | 'printed'): Promise<void> => {
@@ -177,5 +248,5 @@ export const updateOrderStatus = async (id: string, status: 'open' | 'printed'):
 };
 
 export const initializeStorage = () => {
-  console.log("Serviço de armazenamento Supabase inicializado");
+  console.log("Serviço de armazenamento Supabase inicializado com mapeamento de colunas.");
 };
