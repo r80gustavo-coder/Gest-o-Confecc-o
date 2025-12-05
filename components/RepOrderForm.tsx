@@ -382,7 +382,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                       </span>
                   ) : (
                       <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded flex items-center font-bold">
-                          <Check className="w-3 h-3 mr-1" /> Venda Livre (Permite Backorder)
+                          <Check className="w-3 h-3 mr-1" /> Venda Livre
                       </span>
                   )}
               </div>
