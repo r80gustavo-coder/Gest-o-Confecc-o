@@ -157,19 +157,23 @@ const ProductManager: React.FC = () => {
 
   // --- Lógica de Entrada de Estoque (Recebimento) ---
   const handleSaveStockEntry = async () => {
-      if (!entryProduct || !entryQty) {
-          alert("Selecione produto e quantidade.");
+      // 1. Validações Explícitas com Alertas
+      if (!entryProduct) {
+          alert("Selecione um Produto (Referência e Cor).");
           return;
       }
-
+      if (!entryQty || entryQty.trim() === '') {
+          alert("Digite a Quantidade a ser adicionada.");
+          return;
+      }
       if (entryMode === 'single' && !entrySize) {
-          alert("Selecione o tamanho.");
+          alert("Selecione o Tamanho para dar entrada.");
           return;
       }
       
       const qtyToAdd = parseInt(entryQty);
       if (isNaN(qtyToAdd) || qtyToAdd <= 0) {
-          alert("Quantidade inválida.");
+          alert("A quantidade deve ser um número maior que zero.");
           return;
       }
 
@@ -191,7 +195,7 @@ const ProductManager: React.FC = () => {
 
           await updateProductInventory(entryProduct.id, currentStock, entryProduct.enforceStock, entryProduct.basePrice);
           
-          // CRITICAL: Refresh data and UPDATE local entryProduct state immediately
+          // Refresh data and update local state
           const updatedProducts = await fetchData();
           const updatedCurrentProduct = updatedProducts.find(p => p.id === entryProduct.id);
           if (updatedCurrentProduct) {
@@ -479,7 +483,10 @@ const ProductManager: React.FC = () => {
                                 <div className="flex gap-2 mb-4">
                                     <button
                                         type="button"
-                                        onClick={() => setEntryMode('single')}
+                                        onClick={() => {
+                                            setEntryMode('single');
+                                            setEntrySize(''); // Limpa seleção ao mudar modo
+                                        }}
                                         className={`flex-1 py-2 text-xs font-bold rounded flex flex-col items-center justify-center border ${entryMode === 'single' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
                                     >
                                         <Maximize className="w-4 h-4 mb-1" />
@@ -487,7 +494,10 @@ const ProductManager: React.FC = () => {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setEntryMode('grid')}
+                                        onClick={() => {
+                                            setEntryMode('grid');
+                                            setEntrySize(''); // Limpa seleção ao mudar modo
+                                        }}
                                         className={`flex-1 py-2 text-xs font-bold rounded flex flex-col items-center justify-center border ${entryMode === 'grid' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
                                     >
                                         <Layers className="w-4 h-4 mb-1" />
@@ -533,7 +543,7 @@ const ProductManager: React.FC = () => {
                                     {entryMode === 'single' && entrySize && (
                                         <div className="flex justify-between items-center text-gray-600">
                                             <span>Estoque {entrySize}: <strong>{entryProduct.stock[entrySize] || 0}</strong></span>
-                                            {entryQty && <span className="text-green-600 font-bold">Novo: {(entryProduct.stock[entrySize] || 0) + parseInt(entryQty)}</span>}
+                                            {entryQty && <span className="text-green-600 font-bold">Novo: {(entryProduct.stock[entrySize] || 0) + parseInt(entryQty || '0')}</span>}
                                         </div>
                                     )}
                                     {entryMode === 'grid' && (
@@ -562,7 +572,7 @@ const ProductManager: React.FC = () => {
                         </button>
                         <button 
                             onClick={handleSaveStockEntry}
-                            disabled={loading || !entryProduct || !entryQty || (entryMode === 'single' && !entrySize)}
+                            disabled={loading}
                             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold flex items-center shadow-sm disabled:opacity-50"
                         >
                             <Check className="w-4 h-4 mr-2" /> Confirmar Entrada
