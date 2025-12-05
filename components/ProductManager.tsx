@@ -162,10 +162,12 @@ const ProductManager: React.FC = () => {
           alert("Selecione um Produto (Referência e Cor).");
           return;
       }
+      
       if (!entryQty || entryQty.trim() === '') {
           alert("Digite a Quantidade a ser adicionada.");
           return;
       }
+
       if (entryMode === 'single' && !entrySize) {
           alert("Selecione o Tamanho para dar entrada.");
           return;
