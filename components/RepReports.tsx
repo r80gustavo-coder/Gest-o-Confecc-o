@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
 import { getOrders, getClients } from '../services/storageService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Loader2, Calendar, Search, Filter, Printer, ShoppingBag, DollarSign, Package, UserCheck } from 'lucide-react';
+import { Loader2, Calendar, Search, Filter, Printer, ShoppingBag, DollarSign, Package, UserCheck, ClipboardList } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -243,8 +243,53 @@ const RepReports: React.FC<Props> = ({ user }) => {
             </div>
         </div>
 
+        {/* NOVA TABELA: HISTÓRICO DE PEDIDOS (RESUMO) */}
+        {selectedClient && filteredOrders.length > 0 && (
+             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden animate-fade-in break-inside-avoid">
+                <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center">
+                     <ClipboardList className="w-5 h-5 mr-2 text-blue-600" />
+                     <h3 className="font-bold text-gray-800 text-sm uppercase">
+                        Histórico de Pedidos - {selectedClient.name}
+                     </h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-white text-gray-600 font-bold uppercase border-b text-xs">
+                            <tr>
+                                <th className="p-3">Data</th>
+                                <th className="p-3">Pedido #</th>
+                                <th className="p-3 text-center">Qtd Peças</th>
+                                <th className="p-3 text-right">Valor Total</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {filteredOrders.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(order => (
+                                <tr key={order.id} className="hover:bg-gray-50">
+                                    <td className="p-3 text-gray-600">
+                                        {new Date(order.createdAt).toLocaleDateString()}
+                                    </td>
+                                    <td className="p-3 font-bold text-gray-800">#{order.displayId}</td>
+                                    <td className="p-3 text-center text-blue-600 font-medium">{order.totalPieces}</td>
+                                    <td className="p-3 text-right font-bold text-green-700">
+                                        R$ {(order.finalTotalValue || 0).toFixed(2)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot className="bg-gray-50 border-t border-gray-200">
+                            <tr>
+                                <td colSpan={2} className="p-3 text-right font-bold text-gray-500 uppercase">Total do Período</td>
+                                <td className="p-3 text-center font-bold text-blue-800 text-lg">{totalPieces}</td>
+                                <td className="p-3 text-right font-bold text-green-800 text-lg">R$ {totalRevenue.toFixed(2)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* TOP CLIENTES CHART - Só exibe se NÃO tiver cliente selecionado (pois seria redundante) */}
+            {/* TOP CLIENTES CHART - Só exibe se NÃO tiver cliente selecionado */}
             {!selectedClientId && (
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 lg:col-span-1 break-inside-avoid">
                     <h3 className="font-bold text-gray-800 mb-4 text-sm uppercase">Top 5 Clientes (Valor)</h3>
@@ -274,7 +319,7 @@ const RepReports: React.FC<Props> = ({ user }) => {
             <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${selectedClientId ? 'lg:col-span-3' : 'lg:col-span-2'} overflow-hidden break-before-page`}>
                 <div className="p-4 bg-gray-50 border-b border-gray-200">
                      <h3 className="font-bold text-gray-800 text-sm uppercase">
-                        {selectedClient ? `Itens comprados por ${selectedClient.name}` : 'Histórico de Itens Vendidos'}
+                        {selectedClient ? `Detalhamento de Itens - ${selectedClient.name}` : 'Histórico de Itens Vendidos'}
                      </h3>
                 </div>
                 <div className="overflow-x-auto">
