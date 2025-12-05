@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { ProductDef, SizeGridType, SIZE_GRIDS } from '../types';
-import { getProducts, addProduct, deleteProduct, generateUUID } from '../services/storageService';
-import { Trash, Plus, Shirt, Loader2, Package } from 'lucide-react';
+import { getProducts, addProduct, deleteProduct, updateProductInventory, generateUUID } from '../services/storageService';
+import { Trash, Plus, Loader2, Package, Edit2, X, Save } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
@@ -10,9 +10,14 @@ const ProductManager: React.FC = () => {
   const [newColor, setNewColor] = useState('');
   const [newGrid, setNewGrid] = useState<SizeGridType>(SizeGridType.ADULT);
   
-  // Novos estados para estoque
+  // Novos estados para cadastro de estoque
   const [initialStock, setInitialStock] = useState<{[key: string]: string}>({});
   const [enforceStock, setEnforceStock] = useState(false);
+
+  // Estados para EDIÇÃO
+  const [editingProduct, setEditingProduct] = useState<ProductDef | null>(null);
+  const [editStockValues, setEditStockValues] = useState<{[key: string]: string}>({});
+  const [editEnforceStock, setEditEnforceStock] = useState(false);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,7 +33,7 @@ const ProductManager: React.FC = () => {
     fetchData();
   }, []);
 
-  // Limpa os inputs de estoque quando muda a grade
+  // Limpa os inputs de estoque quando muda a grade (Cadastro)
   useEffect(() => {
     setInitialStock({});
   }, [newGrid]);
@@ -86,6 +91,43 @@ const ProductManager: React.FC = () => {
     }
   };
 
+  // --- Lógica de Edição ---
+  const handleEditClick = (product: ProductDef) => {
+    setEditingProduct(product);
+    setEditEnforceStock(product.enforceStock);
+    
+    // Converte o estoque atual (number) para string para os inputs
+    const stockStrings: {[key: string]: string} = {};
+    if (product.stock) {
+        Object.entries(product.stock).forEach(([key, val]) => {
+            stockStrings[key] = val.toString();
+        });
+    }
+    setEditStockValues(stockStrings);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingProduct) return;
+    setLoading(true);
+    
+    try {
+        const finalStock: {[key: string]: number} = {};
+        SIZE_GRIDS[editingProduct.gridType].forEach(size => {
+            const val = parseInt(editStockValues[size] || '0');
+            if (val > 0) finalStock[size] = val;
+        });
+
+        await updateProductInventory(editingProduct.id, finalStock, editEnforceStock);
+        
+        await fetchData();
+        setEditingProduct(null);
+    } catch (e: any) {
+        alert("Erro ao atualizar estoque: " + e.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -93,6 +135,7 @@ const ProductManager: React.FC = () => {
          {loading && <Loader2 className="animate-spin text-blue-600" />}
       </div>
       
+      {/* Formulário de Cadastro */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">Cadastrar Novo Produto</h3>
         {error && <div className="mb-4 text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
@@ -182,6 +225,7 @@ const ProductManager: React.FC = () => {
         </form>
       </div>
 
+      {/* Lista de Produtos */}
       <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[800px]">
@@ -224,7 +268,14 @@ const ProductManager: React.FC = () => {
                                     ))}
                                 </div>
                             </td>
-                            <td className="p-4 text-right">
+                            <td className="p-4 text-right flex justify-end gap-2">
+                                <button 
+                                    onClick={() => handleEditClick(prod)}
+                                    className="text-blue-600 hover:bg-blue-50 p-2 rounded transition"
+                                    title="Editar Estoque"
+                                >
+                                    <Edit2 className="w-5 h-5" />
+                                </button>
                                 <button 
                                     onClick={() => handleDelete(prod.id)}
                                     className="text-red-500 hover:bg-red-50 p-2 rounded transition"
@@ -240,6 +291,81 @@ const ProductManager: React.FC = () => {
             </table>
         </div>
       </div>
+
+      {/* MODAL DE EDIÇÃO */}
+      {editingProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-lg shadow-xl animate-fade-in">
+                <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                    <h3 className="font-bold text-lg text-gray-800 flex items-center">
+                        <Edit2 className="w-5 h-5 mr-2 text-blue-600" />
+                        Editar Estoque
+                    </h3>
+                    <button onClick={() => setEditingProduct(null)} className="text-gray-400 hover:text-gray-600">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+                
+                <div className="p-6">
+                    <div className="mb-4 bg-blue-50 p-3 rounded border border-blue-100">
+                        <p className="text-sm text-blue-900"><strong>Referência:</strong> {editingProduct.reference}</p>
+                        <p className="text-sm text-blue-900"><strong>Cor:</strong> {editingProduct.color}</p>
+                    </div>
+
+                    <div className="mb-6">
+                        <div className="flex justify-between items-center mb-2">
+                             <label className="text-sm font-bold text-gray-700">Quantidade por Tamanho</label>
+                             <label className="flex items-center text-sm cursor-pointer select-none">
+                                <input 
+                                    type="checkbox" 
+                                    className="mr-2 w-4 h-4 text-blue-600 rounded"
+                                    checked={editEnforceStock}
+                                    onChange={(e) => setEditEnforceStock(e.target.checked)}
+                                />
+                                <span className={`${editEnforceStock ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                    Travar venda sem estoque
+                                </span>
+                             </label>
+                        </div>
+                        
+                        <div className="grid grid-cols-4 gap-3">
+                            {SIZE_GRIDS[editingProduct.gridType].map(size => (
+                                <div key={size}>
+                                    <label className="block text-xs font-bold text-center mb-1 text-gray-500">{size}</label>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        className="w-full border p-2 text-center rounded focus:ring-2 focus:ring-blue-500"
+                                        value={editStockValues[size] || ''}
+                                        onChange={(e) => setEditStockValues({...editStockValues, [size]: e.target.value})}
+                                        placeholder="0"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 rounded-b-lg flex justify-end gap-2 border-t">
+                    <button 
+                        onClick={() => setEditingProduct(null)}
+                        className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleSaveEdit}
+                        disabled={loading}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium flex items-center shadow-sm"
+                    >
+                        {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                        Salvar Alterações
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 };

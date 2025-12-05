@@ -72,6 +72,16 @@ export const addProduct = async (prod: ProductDef): Promise<void> => {
   if (error) throw error;
 };
 
+// Função atualizada para editar estoque e configurações do produto
+export const updateProductInventory = async (id: string, newStock: any, enforceStock: boolean): Promise<void> => {
+    const { error } = await supabase
+        .from('products')
+        .update({ stock: newStock, enforce_stock: enforceStock })
+        .eq('id', id);
+    if (error) throw error;
+}
+
+// Mantendo compatibilidade com código antigo se houver, mas redirecionando
 export const updateProductStock = async (id: string, newStock: any): Promise<void> => {
     const { error } = await supabase
         .from('products')
@@ -105,8 +115,8 @@ export const updateStockAfterOrder = async (items: OrderItem[]): Promise<void> =
                 newStock[size] = currentQty - qty;
             });
 
-            // Atualiza no banco
-            await updateProductStock(product.id, newStock);
+            // Atualiza no banco (mantém a config de enforceStock atual)
+            await updateProductInventory(product.id, newStock, product.enforceStock);
         }
     }
 };
