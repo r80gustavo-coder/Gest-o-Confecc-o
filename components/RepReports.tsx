@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
 import { getOrders, getClients } from '../services/storageService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Loader2, Calendar, Search, Filter, Printer, ShoppingBag, DollarSign, Package } from 'lucide-react';
+import { Loader2, Calendar, Search, Filter, Printer, ShoppingBag, DollarSign, Package, UserCheck } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -59,6 +59,9 @@ const RepReports: React.FC<Props> = ({ user }) => {
 
     return matchDate && matchClient && matchTerm;
   });
+
+  // --- HELPER: Selected Client Object ---
+  const selectedClient = selectedClientId ? clients.find(c => c.id === selectedClientId) : null;
 
   // --- AGGREGATIONS FOR KPI ---
   const totalRevenue = filteredOrders.reduce((acc, o) => acc + (o.finalTotalValue || 0), 0);
@@ -184,7 +187,22 @@ const RepReports: React.FC<Props> = ({ user }) => {
         <div className="hidden print-only mb-6 text-center border-b-2 border-black pb-4">
             <h1 className="text-2xl font-bold uppercase">Relatório de Vendas - {user.name}</h1>
             <p className="text-sm mt-1">Período: {new Date(startDate).toLocaleDateString()} até {new Date(endDate).toLocaleDateString()}</p>
+            {selectedClient && <p className="font-bold mt-2">Cliente: {selectedClient.name}</p>}
         </div>
+
+        {/* SUMMARY HEADER IF CLIENT SELECTED */}
+        {selectedClient && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center animate-fade-in">
+                <div className="bg-blue-100 p-2 rounded-full mr-3 text-blue-600">
+                    <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                    <span className="block text-xs font-bold text-blue-500 uppercase">Filtrado por Cliente</span>
+                    <span className="block text-lg font-bold text-blue-900">{selectedClient.name}</span>
+                    <span className="text-sm text-blue-700">{selectedClient.city} - {selectedClient.state}</span>
+                </div>
+            </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -197,6 +215,7 @@ const RepReports: React.FC<Props> = ({ user }) => {
                     <p className="text-2xl font-bold text-gray-900">R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                 </div>
             </div>
+            
             <div className="bg-white p-5 rounded-lg shadow-sm border border-l-4 border-l-blue-500 border-gray-100 flex items-center">
                 <div className="p-3 bg-blue-50 rounded-full mr-4 text-blue-600">
                     <Package className="w-6 h-6" />
@@ -206,53 +225,64 @@ const RepReports: React.FC<Props> = ({ user }) => {
                     <p className="text-2xl font-bold text-gray-900">{totalPieces}</p>
                 </div>
             </div>
+
+            {/* CARD DINÂMICO DE PEDIDOS */}
              <div className="bg-white p-5 rounded-lg shadow-sm border border-l-4 border-l-purple-500 border-gray-100 flex items-center">
                 <div className="p-3 bg-purple-50 rounded-full mr-4 text-purple-600">
                     <ShoppingBag className="w-6 h-6" />
                 </div>
                 <div>
-                    <p className="text-xs font-bold text-gray-500 uppercase">Pedidos Feitos</p>
+                    <p className="text-xs font-bold text-gray-500 uppercase">
+                        {selectedClient ? `Pedidos (${selectedClient.name.split(' ')[0]})` : 'Total de Pedidos'}
+                    </p>
                     <p className="text-2xl font-bold text-gray-900">{totalOrdersCount}</p>
+                    {selectedClient && (
+                         <span className="text-[10px] text-purple-600 bg-purple-50 px-1 rounded">neste período</span>
+                    )}
                 </div>
             </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* TOP CLIENTES CHART */}
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 lg:col-span-1 break-inside-avoid">
-                <h3 className="font-bold text-gray-800 mb-4 text-sm uppercase">Top 5 Clientes (Valor)</h3>
-                <div className="h-64">
-                    {topClientsData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={topClientsData} layout="vertical" margin={{ left: 0, right: 30 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                <XAxis type="number" hide />
-                                <YAxis dataKey="name" type="category" width={90} tick={{fontSize: 10}} />
-                                <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
-                                <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
-                                    {topClientsData.map((_, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>
-                    )}
+            {/* TOP CLIENTES CHART - Só exibe se NÃO tiver cliente selecionado (pois seria redundante) */}
+            {!selectedClientId && (
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 lg:col-span-1 break-inside-avoid">
+                    <h3 className="font-bold text-gray-800 mb-4 text-sm uppercase">Top 5 Clientes (Valor)</h3>
+                    <div className="h-64">
+                        {topClientsData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={topClientsData} layout="vertical" margin={{ left: 0, right: 30 }}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={90} tick={{fontSize: 10}} />
+                                    <Tooltip formatter={(value) => `R$ ${Number(value).toFixed(2)}`} />
+                                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
+                                        {topClientsData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-gray-400 text-sm">Sem dados</div>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* DETAILED ITEMS TABLE */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2 overflow-hidden break-before-page">
+            <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${selectedClientId ? 'lg:col-span-3' : 'lg:col-span-2'} overflow-hidden break-before-page`}>
                 <div className="p-4 bg-gray-50 border-b border-gray-200">
-                     <h3 className="font-bold text-gray-800 text-sm uppercase">Histórico de Itens Vendidos</h3>
+                     <h3 className="font-bold text-gray-800 text-sm uppercase">
+                        {selectedClient ? `Itens comprados por ${selectedClient.name}` : 'Histórico de Itens Vendidos'}
+                     </h3>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-white text-gray-600 font-bold uppercase border-b text-xs">
                             <tr>
                                 <th className="p-3">Data</th>
-                                <th className="p-3">Cliente</th>
+                                {!selectedClientId && <th className="p-3">Cliente</th>}
                                 <th className="p-3">Item (Ref/Cor)</th>
                                 <th className="p-3 text-center">Grade</th>
                                 <th className="p-3 text-right">Qtd</th>
@@ -261,7 +291,7 @@ const RepReports: React.FC<Props> = ({ user }) => {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {soldItems.length === 0 ? (
-                                <tr><td colSpan={6} className="p-6 text-center text-gray-400">Nenhum item encontrado com os filtros atuais.</td></tr>
+                                <tr><td colSpan={selectedClientId ? 5 : 6} className="p-6 text-center text-gray-400">Nenhum item encontrado com os filtros atuais.</td></tr>
                             ) : (
                                 soldItems.map((item, idx) => (
                                     <tr key={idx} className="hover:bg-gray-50">
@@ -269,7 +299,7 @@ const RepReports: React.FC<Props> = ({ user }) => {
                                             {new Date(item.date).toLocaleDateString()}
                                             <div className="text-[10px] text-gray-400">#{item.orderId}</div>
                                         </td>
-                                        <td className="p-3 font-medium text-gray-800">{item.clientName}</td>
+                                        {!selectedClientId && <td className="p-3 font-medium text-gray-800">{item.clientName}</td>}
                                         <td className="p-3">
                                             <span className="font-bold block">{item.reference}</span>
                                             <span className="text-xs uppercase text-gray-500">{item.color}</span>
