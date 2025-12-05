@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, Role } from '../types';
-import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X, DollarSign, FileBarChart } from 'lucide-react';
+import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X, DollarSign, FileBarChart, PieChart } from 'lucide-react';
 
 interface LayoutProps {
   user: User;
@@ -53,8 +53,9 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
               <NavItem id="rep-dashboard" icon={LayoutDashboard} label="Meus Pedidos" />
               <NavItem id="new-order" icon={ShoppingCart} label="Novo Pedido" />
               <NavItem id="clients" icon={Users} label="Meus Clientes" />
-              {/* ITEM TABELA DE PREÇOS ADICIONADO ABAIXO DE CLIENTES */}
               <NavItem id="prices" icon={DollarSign} label="Tabela de Preços" />
+              {/* NOVO ITEM DE MENU */}
+              <NavItem id="rep-reports" icon={PieChart} label="Meus Relatórios" />
             </>
           )}
         </nav>
@@ -96,6 +97,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
                 <NavItem id="new-order" icon={ShoppingCart} label="Novo Pedido" />
                 <NavItem id="clients" icon={Users} label="Meus Clientes" />
                 <NavItem id="prices" icon={DollarSign} label="Tabela de Preços" />
+                <NavItem id="rep-reports" icon={PieChart} label="Meus Relatórios" />
               </>
             )}
             <div className="border-t pt-4 mt-4">

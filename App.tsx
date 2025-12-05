@@ -11,6 +11,7 @@ import RepOrderForm from './components/RepOrderForm';
 import RepOrderList from './components/RepOrderList';
 import RepPriceManager from './components/RepPriceManager';
 import AdminReports from './components/AdminReports';
+import RepReports from './components/RepReports'; // Novo import
 import { User, Role } from './types';
 import { initializeStorage } from './services/storageService';
 
@@ -75,8 +76,9 @@ const App: React.FC = () => {
           {activeTab === 'rep-dashboard' && <RepOrderList user={user} />}
           {activeTab === 'new-order' && <RepOrderForm user={user} onOrderCreated={() => setActiveTab('rep-dashboard')} />}
           {activeTab === 'clients' && <ClientManager user={user} />}
-          {/* Rota para Tabela de Preços */}
           {activeTab === 'prices' && <RepPriceManager user={user} />}
+          {/* Nova Rota */}
+          {activeTab === 'rep-reports' && <RepReports user={user} />}
         </>
       )}
     </Layout>
