@@ -2,14 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { ProductDef, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, addProduct, deleteProduct, updateProductInventory, generateUUID } from '../services/storageService';
-import { Trash, Plus, Loader2, Package, Edit2, X, Save, DollarSign, ArrowDownToLine, Check, Layers, Maximize } from 'lucide-react';
+import { Trash, Plus, Loader2, Package, Edit2, X, Save, DollarSign, ArrowDownToLine, Check } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
   const [newRef, setNewRef] = useState('');
   const [newColor, setNewColor] = useState('');
   const [newGrid, setNewGrid] = useState<SizeGridType>(SizeGridType.ADULT);
-  const [newBasePrice, setNewBasePrice] = useState(''); 
+  const [newBasePrice, setNewBasePrice] = useState(''); // Novo state para preço de custo
   
   // Novos estados para cadastro de estoque
   const [initialStock, setInitialStock] = useState<{[key: string]: string}>({});
@@ -19,15 +19,11 @@ const ProductManager: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<ProductDef | null>(null);
   const [editStockValues, setEditStockValues] = useState<{[key: string]: string}>({});
   const [editEnforceStock, setEditEnforceStock] = useState(false);
-  const [editBasePrice, setEditBasePrice] = useState(''); 
+  const [editBasePrice, setEditBasePrice] = useState(''); // State para edição de preço
 
-  // Estados para ENTRADA DE ESTOQUE (Atualizado)
+  // Estados para ENTRADA DE ESTOQUE
   const [showStockEntry, setShowStockEntry] = useState(false);
-  const [entryRef, setEntryRef] = useState(''); // Seleção de Referência
-  const [entryColor, setEntryColor] = useState(''); // Seleção de Cor
-  const [entryProduct, setEntryProduct] = useState<ProductDef | null>(null); // Produto final encontrado
-  
-  const [entryMode, setEntryMode] = useState<'single' | 'grid'>('single'); // Modo: Tamanho único ou Grade
+  const [entryProduct, setEntryProduct] = useState<ProductDef | null>(null);
   const [entrySize, setEntrySize] = useState('');
   const [entryQty, setEntryQty] = useState('');
 
@@ -38,7 +34,7 @@ const ProductManager: React.FC = () => {
     setLoading(true);
     const data = await getProducts();
     setProducts(data);
-    return data; // Retorna para uso imediato se necessário
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -49,16 +45,6 @@ const ProductManager: React.FC = () => {
   useEffect(() => {
     setInitialStock({});
   }, [newGrid]);
-
-  // Efeito para encontrar o produto quando Ref e Cor são selecionados na Entrada
-  useEffect(() => {
-      if (entryRef && entryColor) {
-          const found = products.find(p => p.reference === entryRef && p.color === entryColor);
-          setEntryProduct(found || null);
-      } else {
-          setEntryProduct(null);
-      }
-  }, [entryRef, entryColor, products]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,13 +143,8 @@ const ProductManager: React.FC = () => {
 
   // --- Lógica de Entrada de Estoque (Recebimento) ---
   const handleSaveStockEntry = async () => {
-      if (!entryProduct || !entryQty) {
-          alert("Selecione produto e quantidade.");
-          return;
-      }
-
-      if (entryMode === 'single' && !entrySize) {
-          alert("Selecione o tamanho.");
+      if (!entryProduct || !entrySize || !entryQty) {
+          alert("Selecione produto, tamanho e quantidade.");
           return;
       }
       
@@ -175,45 +156,24 @@ const ProductManager: React.FC = () => {
 
       setLoading(true);
       try {
-          const currentStock = { ...entryProduct.stock } || {};
-          
-          if (entryMode === 'single') {
-              // Adiciona apenas ao tamanho selecionado
-              const currentQty = currentStock[entrySize] || 0;
-              currentStock[entrySize] = currentQty + qtyToAdd;
-          } else {
-              // Adiciona a TODOS os tamanhos da grade
-              SIZE_GRIDS[entryProduct.gridType].forEach(size => {
-                  const currentQty = currentStock[size] || 0;
-                  currentStock[size] = currentQty + qtyToAdd;
-              });
-          }
+          const currentStock = entryProduct.stock || {};
+          const currentQty = currentStock[entrySize] || 0;
+          const newQty = currentQty + qtyToAdd;
 
-          await updateProductInventory(entryProduct.id, currentStock, entryProduct.enforceStock, entryProduct.basePrice);
-          
-          // CRITICAL: Refresh data and UPDATE local entryProduct state immediately
-          const updatedProducts = await fetchData();
-          const updatedCurrentProduct = updatedProducts.find(p => p.id === entryProduct.id);
-          if (updatedCurrentProduct) {
-              setEntryProduct(updatedCurrentProduct);
-          }
+          const newStock = { ...currentStock, [entrySize]: newQty };
 
-          // Reset inputs mas mantém produto selecionado
+          await updateProductInventory(entryProduct.id, newStock, entryProduct.enforceStock, entryProduct.basePrice);
+          await fetchData();
+          
+          // Reset parcial para facilitar múltiplas entradas
           setEntryQty('');
-          alert("Estoque atualizado com sucesso!");
+          alert(`Estoque atualizado! ${entryProduct.reference} (${entrySize}) agora tem ${newQty} peças.`);
       } catch (e: any) {
           alert("Erro ao dar entrada no estoque: " + e.message);
       } finally {
           setLoading(false);
       }
   };
-
-  // Unique References for Dropdown
-  const uniqueRefs = Array.from(new Set(products.map(p => p.reference))).sort();
-  // Available Colors for selected Ref
-  const availableColors = entryRef 
-    ? products.filter(p => p.reference === entryRef).map(p => p.color).sort()
-    : [];
 
   return (
     <div className="space-y-6">
@@ -223,14 +183,7 @@ const ProductManager: React.FC = () => {
             {loading && <Loader2 className="animate-spin text-blue-600" />}
         </div>
         <button 
-            onClick={() => {
-                setShowStockEntry(true);
-                setEntryRef('');
-                setEntryColor('');
-                setEntrySize('');
-                setEntryQty('');
-                setEntryMode('single');
-            }}
+            onClick={() => setShowStockEntry(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center shadow hover:bg-green-700 transition"
         >
             <ArrowDownToLine className="w-5 h-5 mr-2" /> Registrar Entrada
@@ -423,10 +376,10 @@ const ProductManager: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL DE ENTRADA DE ESTOQUE (REFORMULADO) */}
+      {/* MODAL DE ENTRADA DE ESTOQUE */}
       {showStockEntry && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
-              <div className="bg-white rounded-lg w-full max-w-md shadow-xl flex flex-col max-h-[90vh] overflow-y-auto">
+              <div className="bg-white rounded-lg w-full max-w-md shadow-xl flex flex-col">
                    <div className="p-4 border-b flex justify-between items-center bg-green-50 rounded-t-lg">
                         <h3 className="font-bold text-lg text-green-900 flex items-center">
                             <ArrowDownToLine className="w-5 h-5 mr-2" /> Recebimento de Mercadoria
@@ -436,119 +389,61 @@ const ProductManager: React.FC = () => {
                         </button>
                     </div>
                     
-                    <div className="p-6 space-y-5">
-                        {/* 1. Seleção de Referência */}
+                    <div className="p-6 space-y-4">
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">1. Referência</label>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">Selecione o Produto</label>
                             <select 
-                                className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500 bg-white"
-                                value={entryRef}
+                                className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
+                                value={entryProduct ? entryProduct.id : ''}
                                 onChange={(e) => {
-                                    setEntryRef(e.target.value);
-                                    setEntryColor(''); // Reset cor ao mudar ref
+                                    const p = products.find(prod => prod.id === e.target.value);
+                                    setEntryProduct(p || null);
+                                    setEntrySize('');
                                 }}
                             >
-                                <option value="">Selecione a Referência...</option>
-                                {uniqueRefs.map(ref => (
-                                    <option key={ref} value={ref}>{ref}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* 2. Seleção de Cor */}
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">2. Cor</label>
-                            <select 
-                                className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500 bg-white"
-                                value={entryColor}
-                                onChange={(e) => setEntryColor(e.target.value)}
-                                disabled={!entryRef}
-                            >
-                                <option value="">{entryRef ? 'Selecione a Cor...' : 'Escolha a Referência primeiro'}</option>
-                                {availableColors.map(c => (
-                                    <option key={c} value={c}>{c}</option>
+                                <option value="">Selecione...</option>
+                                {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.reference} - {p.color}
+                                    </option>
                                 ))}
                             </select>
                         </div>
 
                         {entryProduct && (
-                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                <p className="text-sm font-bold text-gray-800 border-b pb-2 mb-3">Opções de Entrada</p>
-                                
-                                {/* 3. Modo de Entrada: Unitário vs Grade */}
-                                <div className="flex gap-2 mb-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => setEntryMode('single')}
-                                        className={`flex-1 py-2 text-xs font-bold rounded flex flex-col items-center justify-center border ${entryMode === 'single' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Tamanho</label>
+                                    <select 
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
+                                        value={entrySize}
+                                        onChange={(e) => setEntrySize(e.target.value)}
                                     >
-                                        <Maximize className="w-4 h-4 mb-1" />
-                                        Por Tamanho
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setEntryMode('grid')}
-                                        className={`flex-1 py-2 text-xs font-bold rounded flex flex-col items-center justify-center border ${entryMode === 'grid' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                                    >
-                                        <Layers className="w-4 h-4 mb-1" />
-                                        Grade Completa
-                                    </button>
+                                        <option value="">Selecione...</option>
+                                        {SIZE_GRIDS[entryProduct.gridType].map(s => (
+                                            <option key={s} value={s}>{s} (Atual: {entryProduct.stock[s] || 0})</option>
+                                        ))}
+                                    </select>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    {/* 4a. Select de Tamanho (Só se for Single Mode) */}
-                                    {entryMode === 'single' && (
-                                        <div className="col-span-2 md:col-span-1">
-                                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tamanho</label>
-                                            <select 
-                                                className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
-                                                value={entrySize}
-                                                onChange={(e) => setEntrySize(e.target.value)}
-                                            >
-                                                <option value="">...</option>
-                                                {SIZE_GRIDS[entryProduct.gridType].map(s => (
-                                                    <option key={s} value={s}>{s}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* 4b. Quantidade */}
-                                    <div className={entryMode === 'single' ? "col-span-2 md:col-span-1" : "col-span-2"}>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Quantidade</label>
-                                        <input 
-                                            type="number"
-                                            min="1"
-                                            className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
-                                            value={entryQty}
-                                            onChange={(e) => setEntryQty(e.target.value)}
-                                            placeholder="Qtd"
-                                            autoFocus
-                                        />
-                                    </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Qtd Entrada</label>
+                                    <input 
+                                        type="number"
+                                        min="1"
+                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
+                                        value={entryQty}
+                                        onChange={(e) => setEntryQty(e.target.value)}
+                                        placeholder="0"
+                                    />
                                 </div>
-                                
-                                {/* Resumo Visual */}
-                                <div className="mt-4 pt-3 border-t border-gray-200 text-xs">
-                                    {entryMode === 'single' && entrySize && (
-                                        <div className="flex justify-between items-center text-gray-600">
-                                            <span>Estoque {entrySize}: <strong>{entryProduct.stock[entrySize] || 0}</strong></span>
-                                            {entryQty && <span className="text-green-600 font-bold">Novo: {(entryProduct.stock[entrySize] || 0) + parseInt(entryQty)}</span>}
-                                        </div>
-                                    )}
-                                    {entryMode === 'grid' && (
-                                         <div className="text-gray-600">
-                                             <p className="mb-1">Serão adicionadas <strong>{entryQty || 0}</strong> peças para CADA tamanho:</p>
-                                             <div className="flex flex-wrap gap-1">
-                                                {SIZE_GRIDS[entryProduct.gridType].map(s => (
-                                                    <span key={s} className="bg-gray-200 px-1 rounded text-[10px] text-gray-700">
-                                                        {s} (Atual: {entryProduct.stock[s] || 0})
-                                                    </span>
-                                                ))}
-                                             </div>
-                                         </div>
-                                    )}
-                                </div>
+                            </div>
+                        )}
+                        
+                        {entryProduct && entrySize && (
+                            <div className="bg-gray-50 p-3 rounded text-sm text-gray-600">
+                                <p>Estoque Atual: <strong>{entryProduct.stock[entrySize] || 0}</strong></p>
+                                <p>Entrada: <strong>+ {entryQty || 0}</strong></p>
+                                <p className="mt-1 pt-1 border-t text-green-700">Novo Estoque: <strong>{(entryProduct.stock[entrySize] || 0) + (parseInt(entryQty) || 0)}</strong></p>
                             </div>
                         )}
                     </div>
@@ -558,11 +453,11 @@ const ProductManager: React.FC = () => {
                             onClick={() => setShowStockEntry(false)}
                             className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded"
                         >
-                            Fechar
+                            Cancelar
                         </button>
                         <button 
                             onClick={handleSaveStockEntry}
-                            disabled={loading || !entryProduct || !entryQty || (entryMode === 'single' && !entrySize)}
+                            disabled={loading || !entryProduct || !entrySize || !entryQty}
                             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold flex items-center shadow-sm disabled:opacity-50"
                         >
                             <Check className="w-4 h-4 mr-2" /> Confirmar Entrada
