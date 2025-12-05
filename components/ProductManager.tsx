@@ -111,10 +111,13 @@ const ProductManager: React.FC = () => {
     setLoading(true);
     
     try {
+        // Agora aceitamos valores negativos ou zero na edição se necessário, 
+        // mas geralmente salvamos o que o usuário digita.
+        // Se o input estiver vazio, assume 0.
         const finalStock: {[key: string]: number} = {};
         SIZE_GRIDS[editingProduct.gridType].forEach(size => {
             const val = parseInt(editStockValues[size] || '0');
-            if (val > 0) finalStock[size] = val;
+            if (!isNaN(val)) finalStock[size] = val;
         });
 
         await updateProductInventory(editingProduct.id, finalStock, editEnforceStock);
@@ -244,7 +247,7 @@ const ProductManager: React.FC = () => {
                         <tr><td colSpan={6} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
                     )}
                     {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => {
-                        const totalStock = prod.stock ? Object.values(prod.stock).reduce((a: number, b: number) => a + b, 0) : 0;
+                        const totalStock = prod.stock ? (Object.values(prod.stock) as number[]).reduce((a, b) => a + b, 0) : 0;
                         return (
                         <tr key={prod.id} className="hover:bg-gray-50">
                             <td className="p-4 font-bold">{prod.reference}</td>
@@ -261,11 +264,21 @@ const ProductManager: React.FC = () => {
                                 )}
                             </td>
                             <td className="p-4 text-sm">
-                                <span className="font-bold text-gray-700">{totalStock} peças</span>
-                                <div className="text-xs text-gray-400 mt-1 flex flex-wrap gap-1">
-                                    {Object.entries(prod.stock || {}).map(([s, q]) => (
-                                        (q as number) > 0 && <span key={s} className="bg-gray-100 px-1 rounded">{s}:{(q as number)}</span>
-                                    ))}
+                                <span className={`font-bold ${totalStock < 0 ? 'text-red-600' : 'text-gray-700'}`}>{totalStock} peças</span>
+                                <div className="text-xs mt-1 flex flex-wrap gap-1">
+                                    {SIZE_GRIDS[prod.gridType].map((size) => {
+                                        const qty = prod.stock?.[size] || 0;
+                                        // Estilo condicional para facilitar a leitura
+                                        let badgeStyle = "bg-gray-100 text-gray-400";
+                                        if (qty > 0) badgeStyle = "bg-green-50 text-green-700 border border-green-200 font-bold";
+                                        if (qty < 0) badgeStyle = "bg-red-50 text-red-600 border border-red-200 font-bold";
+                                        
+                                        return (
+                                            <span key={size} className={`px-1.5 py-0.5 rounded ${badgeStyle}`}>
+                                                {size}: {qty}
+                                            </span>
+                                        );
+                                    })}
                                 </div>
                             </td>
                             <td className="p-4 text-right flex justify-end gap-2">
@@ -334,7 +347,7 @@ const ProductManager: React.FC = () => {
                                     <label className="block text-xs font-bold text-center mb-1 text-gray-500">{size}</label>
                                     <input 
                                         type="number"
-                                        min="0"
+                                        // Sem min="0" para permitir ajustes negativos manuais se necessário
                                         className="w-full border p-2 text-center rounded focus:ring-2 focus:ring-blue-500"
                                         value={editStockValues[size] || ''}
                                         onChange={(e) => setEditStockValues({...editStockValues, [size]: e.target.value})}
@@ -343,6 +356,7 @@ const ProductManager: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+                        <p className="text-xs text-gray-400 mt-2">Valores negativos são permitidos (indicam venda a descoberto).</p>
                     </div>
                 </div>
 
