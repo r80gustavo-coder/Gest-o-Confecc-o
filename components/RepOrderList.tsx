@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
 import { getOrders, getClients } from '../services/storageService';
-import { Package, Clock, CheckCircle, Search, Eye, X, Loader2 } from 'lucide-react';
+import { Package, Clock, CheckCircle, Search, Eye, X, Loader2, Printer, Share2 } from 'lucide-react';
 
 interface Props {
   user: User;
 }
+
+const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const RepOrderList: React.FC<Props> = ({ user }) => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -29,6 +31,130 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
     };
     fetchData();
   }, [user.id]);
+
+  const handlePrint = (order: Order) => {
+    const win = window.open('', '', 'height=800,width=900');
+    if (!win) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>Pedido #${order.displayId}</title>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <style>
+            @media print { 
+                .no-print { display: none; } 
+                body { -webkit-print-color-adjust: exact; } 
+            }
+            body { font-family: sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #000; padding: 4px; }
+            th { background-color: #f3f4f6; }
+          </style>
+        </head>
+        <body class="bg-white text-black p-8">
+            <div class="flex justify-between border-b-2 border-black pb-4 mb-6">
+                <div>
+                    <h1 class="text-3xl font-extrabold uppercase tracking-wider">Pedido #${order.displayId}</h1>
+                    <p class="text-sm mt-1">Emissão: ${new Date(order.createdAt).toLocaleDateString()}</p>
+                </div>
+                <div class="text-right">
+                    <p class="font-bold text-lg">${order.repName}</p>
+                    <p class="text-sm text-gray-600">Representante</p>
+                </div>
+            </div>
+
+            <div class="mb-6 border border-black p-4 bg-gray-50">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 font-bold">Cliente</p>
+                        <p class="font-bold text-lg">${order.clientName}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 font-bold">Localização</p>
+                        <p>${order.clientCity} - ${order.clientState}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 font-bold">Entrega</p>
+                        <p>${order.deliveryDate ? new Date(order.deliveryDate).toLocaleDateString() : 'A Combinar'}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs uppercase text-gray-500 font-bold">Pagamento</p>
+                        <p>${order.paymentMethod || '-'}</p>
+                    </div>
+                </div>
+            </div>
+
+            <table class="w-full mb-6">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="text-left p-2">Ref / Cor</th>
+                        ${ALL_SIZES.map(s => `<th class="text-center w-8">${s}</th>`).join('')}
+                        <th class="text-right p-2 w-16">Qtd</th>
+                        <th class="text-right p-2 w-24">Unit.</th>
+                        <th class="text-right p-2 w-24">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${order.items.map(item => `
+                        <tr>
+                            <td class="p-2">
+                                <strong>${item.reference}</strong><br/>
+                                <span class="uppercase text-xs">${item.color}</span>
+                            </td>
+                            ${ALL_SIZES.map(s => `<td class="text-center">${item.sizes[s] || '-'}</td>`).join('')}
+                            <td class="text-right font-bold p-2">${item.totalQty}</td>
+                            <td class="text-right p-2">${item.unitPrice.toFixed(2)}</td>
+                            <td class="text-right font-bold p-2">${item.totalItemValue.toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+                <tfoot>
+                    <tr class="bg-gray-100">
+                        <td colspan="${ALL_SIZES.length + 1}" class="text-right font-bold uppercase p-2">Total Itens</td>
+                        <td class="text-right font-bold p-2">${order.totalPieces}</td>
+                        <td class="text-right font-bold p-2">-</td>
+                        <td class="text-right font-bold p-2">${order.subtotalValue.toFixed(2)}</td>
+                    </tr>
+                    ${order.discountValue > 0 ? `
+                    <tr>
+                        <td colspan="${ALL_SIZES.length + 3}" class="text-right p-2">
+                            Desconto (${order.discountType === 'percentage' ? '%' : 'R$'})
+                        </td>
+                        <td class="text-right text-red-600 font-bold p-2">
+                            - ${order.discountType === 'percentage' 
+                                ? ((order.subtotalValue * order.discountValue)/100).toFixed(2) 
+                                : order.discountValue.toFixed(2)}
+                        </td>
+                    </tr>` : ''}
+                    <tr class="text-lg border-t-2 border-black">
+                        <td colspan="${ALL_SIZES.length + 3}" class="text-right uppercase font-bold p-2">Total Final</td>
+                        <td class="text-right font-bold p-2">R$ ${(order.finalTotalValue || 0).toFixed(2)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div class="mt-12 pt-8 border-t border-black flex justify-between text-xs">
+                <div class="text-center">
+                    _______________________________<br/>
+                    ${order.repName}<br/>(Representante)
+                </div>
+                <div class="text-center">
+                    _______________________________<br/>
+                    ${order.clientName}<br/>(Cliente)
+                </div>
+            </div>
+            
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+      </html>
+    `;
+
+    win.document.write(html);
+    win.document.close();
+  };
 
   const filteredOrders = selectedClientId 
     ? orders.filter(o => o.clientId === selectedClientId)
@@ -70,16 +196,25 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                         </div>
                     </div>
                     
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
                         {order.status === 'printed' ? (
-                            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold">
+                            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
                                 <CheckCircle className="w-4 h-4 mr-2" /> Processado
                             </div>
                         ) : (
-                            <div className="flex items-center text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-sm font-bold">
+                            <div className="flex items-center text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
                                 <Clock className="w-4 h-4 mr-2" /> Aguardando
                             </div>
                         )}
+                        
+                        <button 
+                            onClick={() => handlePrint(order)}
+                            className="text-gray-600 hover:bg-gray-100 p-2 rounded-full transition"
+                            title="Imprimir Pedido"
+                        >
+                            <Printer className="w-5 h-5" />
+                        </button>
+
                         <button 
                            onClick={() => setViewOrder(order)}
                            className="text-blue-600 hover:bg-blue-50 p-2 rounded-full transition"
@@ -169,6 +304,17 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 </tr>
                             </tfoot>
                         </table>
+                    </div>
+                    
+                    {/* Botão de Imprimir/Compartilhar no Modal */}
+                    <div className="p-4 border-t bg-gray-50 rounded-b-lg flex justify-end">
+                        <button 
+                            onClick={() => handlePrint(viewOrder)}
+                            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center shadow-sm font-medium"
+                        >
+                            <Printer className="w-5 h-5 mr-2" />
+                            Imprimir / Compartilhar
+                        </button>
                     </div>
                 </div>
             </div>
