@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
 import { getOrders, getClients } from '../services/storageService';
-import { Package, Clock, CheckCircle, Search, Eye, X, Loader2, Printer, CheckCheck } from 'lucide-react';
+import { Package, Clock, CheckCircle, Search, Eye, X, Loader2, Printer, Share2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -193,14 +193,12 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                         totalSeparado += (Object.values(item.picked) as number[]).reduce((a, b) => a + b, 0);
                     }
                 });
-
-                const isFullyPicked = totalSeparado >= totalPedido && totalPedido > 0;
                 
                 return (
-                    <div key={order.id} className={`bg-white p-4 rounded-lg shadow border-l-4 ${isFullyPicked ? 'border-green-500' : 'border-blue-400'} flex flex-col md:flex-row justify-between items-center transition-all`}>
+                    <div key={order.id} className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-400 flex flex-col md:flex-row justify-between items-center">
                         <div className="mb-2 md:mb-0">
                             <div className="flex items-center gap-2">
-                                <span className={`font-bold text-lg ${isFullyPicked ? 'text-green-800' : 'text-blue-900'}`}>Pedido #{order.displayId}</span>
+                                <span className="font-bold text-lg text-blue-900">Pedido #{order.displayId}</span>
                                 <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
                             </div>
                             <div className="text-gray-700 font-medium">{order.clientName}</div>
@@ -209,9 +207,9 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                             </div>
                              {/* Indicador de Separação */}
                              {totalSeparado > 0 && (
-                                <div className={`mt-2 text-xs inline-block px-2 py-1 rounded border font-bold ${isFullyPicked ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                                    {isFullyPicked ? 'Separação Completa: ' : 'Separação: '}
-                                    <span className="ml-1">
+                                <div className="mt-2 text-xs bg-gray-100 inline-block px-2 py-1 rounded border border-gray-200">
+                                    <span className="text-gray-500">Separação:</span> 
+                                    <span className={`font-bold ml-1 ${totalSeparado === totalPedido ? 'text-green-600' : 'text-orange-600'}`}>
                                         {totalSeparado} / {totalPedido}
                                     </span>
                                 </div>
@@ -219,18 +217,9 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                         </div>
                         
                         <div className="flex items-center gap-2">
-                            {/* Lógica de Ícones: 
-                                1. Impresso = CheckCircle (Verde) - Status administrativo
-                                2. Totalmente Separado = CheckCheck (Verde Escuro) - Status Físico
-                                3. Aberto = Clock (Amarelo) 
-                            */}
                             {order.status === 'printed' ? (
                                 <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
                                     <CheckCircle className="w-4 h-4 mr-2" /> Processado
-                                </div>
-                            ) : isFullyPicked ? (
-                                <div className="flex items-center text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-bold mr-2 border border-green-200">
-                                    <CheckCheck className="w-4 h-4 mr-2" /> Completo
                                 </div>
                             ) : (
                                 <div className="flex items-center text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
@@ -307,8 +296,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                         <td className="border p-2 font-medium">{item.reference}</td>
                                         <td className="border p-2">{item.color}</td>
                                         <td className="border p-2 text-center">
-                                            {Object.entries(item.sizes).map(([s, value]) => {
-                                                const q = value as number;
+                                            {Object.entries(item.sizes).map(([s, q]) => {
                                                 const p = (item.picked?.[s] as number) || 0;
                                                 // Exibe: SEPARADO / PEDIDO se houver separação, senão só PEDIDO
                                                 const display = p > 0 ? `${p}/${q}` : `${q}`;
