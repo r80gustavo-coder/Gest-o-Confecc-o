@@ -43,6 +43,9 @@ const AdminReports: React.FC = () => {
     return matchDate && matchRep;
   });
 
+  // Get Selected Rep Name for Printing
+  const selectedRepName = selectedRepId ? reps.find(r => r.id === selectedRepId)?.name : '';
+
   // --- AGGREGATIONS ---
 
   // 1. Matriz de Corte (Production Matrix)
@@ -191,7 +194,7 @@ const AdminReports: React.FC = () => {
         <div className="hidden print-only mb-8 text-center border-b-2 border-black pb-4">
             <h1 className="text-3xl font-bold uppercase">Relatório Gerencial de Confecção</h1>
             <p className="text-lg mt-2">Período: {new Date(startDate).toLocaleDateString()} até {new Date(endDate).toLocaleDateString()}</p>
-            {selectedRepId && <p className="font-bold">Filtro: Representante Específico</p>}
+            {selectedRepId && <p className="font-bold text-xl mt-1">Representante: {selectedRepName}</p>}
         </div>
 
         {/* Summary Cards */}
