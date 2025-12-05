@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, ProductDef, OrderItem, Client, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, getClients, addOrder, getRepPrices, generateUUID } from '../services/storageService';
-import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, Tag, AlertTriangle } from 'lucide-react';
+import { Plus, Trash, Save, Edit2, Loader2, ChevronDown, Check, DollarSign, Calculator, Tag, AlertTriangle, Lock } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -31,6 +31,9 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [currentGrid, setCurrentGrid] = useState<SizeGridType>(SizeGridType.ADULT);
   const [manualUnitPrice, setManualUnitPrice] = useState<string>(''); // Preço editável
   
+  // Dados do produto selecionado (para validação de estoque)
+  const [selectedProductData, setSelectedProductData] = useState<ProductDef | null>(null);
+
   // Editing State
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
@@ -74,13 +77,12 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         .map(p => p.color);
       setAvailableColors([...new Set(colors)]);
       
+      // Tenta encontrar o produto para setar o grid corretamente se não estivermos editando
       if (editingIndex === null) {
         const prod = products.find(p => p.reference === currentRef);
         if (prod) setCurrentGrid(prod.gridType);
         
         // AUTO-PREENCHIMENTO DO PREÇO
-        // Se já tiver um preço digitado manualmente, não sobrescreve, 
-        // a menos que o campo esteja vazio ou a referência mudou drasticamente (que é coberto pelo if currentRef)
         const configPrice = priceMap[currentRef] || 0;
         setManualUnitPrice(configPrice > 0 ? configPrice.toFixed(2) : '');
       }
@@ -90,6 +92,16 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     }
   }, [currentRef, products, editingIndex, priceMap]);
 
+  // Atualiza o produto selecionado completo para acessar o ESTOQUE
+  useEffect(() => {
+      if (currentRef && currentColor) {
+          const prod = products.find(p => p.reference === currentRef && p.color === currentColor);
+          setSelectedProductData(prod || null);
+      } else {
+          setSelectedProductData(null);
+      }
+  }, [currentRef, currentColor, products]);
+
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(''); // Limpa erros anteriores
@@ -97,13 +109,29 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
 
     const sizesNum: {[key: string]: number} = {};
     let total = 0;
+    let stockError = '';
+
+    // Validação e Conversão
     Object.entries(quickSizes).forEach(([size, qtyStr]) => {
       const q = parseInt(qtyStr as string);
       if (q > 0) {
+        // Validação de Estoque se a trava estiver ativa
+        if (selectedProductData && selectedProductData.enforceStock) {
+            const available = selectedProductData.stock[size] || 0;
+            if (q > available) {
+                stockError = `Sem estoque suficiente para o tamanho ${size} (Disponível: ${available}).`;
+            }
+        }
+
         sizesNum[size] = q;
         total += q;
       }
     });
+
+    if (stockError) {
+        setErrorMsg(stockError);
+        return;
+    }
 
     if (total === 0) {
         setErrorMsg('Adicione quantidade em pelo menos um tamanho.');
@@ -133,8 +161,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
       setManualUnitPrice('');
     } else {
       setItems([...items, newItem]);
-      // Se está ADICIONANDO NOVO:
-      // Mantém currentRef e manualUnitPrice para facilitar inserção de outra cor
     }
     
     // Limpa apenas a cor e tamanhos para o próximo item
@@ -224,7 +250,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         onOrderCreated();
     } catch (error: any) {
         console.error("Erro ao salvar pedido:", error);
-        // Exibe erro amigável ou o erro técnico do Supabase
         setErrorMsg(`Não foi possível salvar o pedido. Detalhes: ${error.message || error.toString()}`);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
@@ -348,27 +373,58 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             </div>
           </div>
 
-          {/* Size Grid */}
+          {/* WARNING ABOUT STOCK MODE */}
+          {selectedProductData && (
+              <div className="flex items-center text-xs gap-2 mb-1">
+                  {selectedProductData.enforceStock ? (
+                      <span className="text-red-600 bg-red-50 px-2 py-0.5 rounded flex items-center font-bold">
+                          <Lock className="w-3 h-3 mr-1" /> Venda Limitada ao Estoque
+                      </span>
+                  ) : (
+                      <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded flex items-center font-bold">
+                          <Check className="w-3 h-3 mr-1" /> Venda Livre (Permite Backorder)
+                      </span>
+                  )}
+              </div>
+          )}
+
+          {/* Size Grid com Estoque */}
           <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Grade de Quantidades</label>
               <div className="bg-white p-2 rounded border border-gray-200 shadow-sm overflow-x-auto">
                 <div className="flex gap-2 min-w-max">
-                    {SIZE_GRIDS[currentGrid]?.map(size => (
-                    <div key={size} className="w-12">
-                        <label className="block text-[10px] text-center text-gray-500 font-bold mb-1">{size}</label>
-                        <input 
-                        type="number"
-                        min="0"
-                        inputMode="numeric"
-                        className="w-full border text-center p-2 rounded text-base focus:bg-blue-50 outline-none"
-                        value={quickSizes[size] || ''}
-                        onChange={(e) => setQuickSizes({...quickSizes, [size]: e.target.value})}
-                        onKeyDown={(e) => {
-                            if(e.key === 'Enter') handleAddItem(e);
-                        }}
-                        />
-                    </div>
-                    ))}
+                    {SIZE_GRIDS[currentGrid]?.map(size => {
+                        const stock = selectedProductData?.stock?.[size] || 0;
+                        const hasStock = stock > 0;
+                        const enforce = selectedProductData?.enforceStock;
+                        // Se enforce for true, desabilita se stock <= 0. Se enforce false, sempre habilita.
+                        // Mas na verdade, é melhor permitir digitar e validar ao submeter ou mostrar visualmente.
+                        // Vamos mostrar visualmente.
+                        
+                        return (
+                        <div key={size} className="w-16">
+                            <label className="block text-[10px] text-center text-gray-500 font-bold mb-1">{size}</label>
+                            <input 
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                className={`w-full border text-center p-2 rounded text-base focus:bg-blue-50 outline-none 
+                                    ${enforce && !hasStock ? 'bg-gray-100 text-gray-400' : ''}`}
+                                value={quickSizes[size] || ''}
+                                onChange={(e) => setQuickSizes({...quickSizes, [size]: e.target.value})}
+                                onKeyDown={(e) => {
+                                    if(e.key === 'Enter') handleAddItem(e);
+                                }}
+                            />
+                            {/* Stock Indicator */}
+                            {selectedProductData && (
+                                <div className={`text-[10px] text-center mt-1 font-bold ${hasStock ? 'text-green-600' : 'text-red-500'}`}>
+                                    Est: {stock}
+                                </div>
+                            )}
+                        </div>
+                        );
+                    })}
                 </div>
               </div>
           </div>

@@ -22,6 +22,8 @@ export interface ProductDef {
   reference: string;
   color: string;
   gridType: SizeGridType;
+  stock: { [size: string]: number }; // Estoque por tamanho ex: { "P": 10, "M": 5 }
+  enforceStock: boolean; // Se true, não deixa vender sem estoque
 }
 
 export interface RepPrice {

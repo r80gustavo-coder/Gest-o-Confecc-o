@@ -1,5 +1,5 @@
 
-import { User, ProductDef, Order, Client, Role, RepPrice } from '../types';
+import { User, ProductDef, Order, Client, Role, RepPrice, OrderItem } from '../types';
 import { supabase } from './supabaseClient';
 
 // --- UTILS ---
@@ -51,7 +51,9 @@ export const getProducts = async (): Promise<ProductDef[]> => {
     id: p.id,
     reference: p.reference,
     color: p.color,
-    gridType: p.grid_type || p.gridType // Garante a leitura correta da coluna grid_type
+    gridType: p.grid_type || p.gridType,
+    stock: p.stock || {}, // Novo campo
+    enforceStock: p.enforce_stock || false // Novo campo
   })) as ProductDef[] || [];
 };
 
@@ -61,16 +63,52 @@ export const addProduct = async (prod: ProductDef): Promise<void> => {
     id: prod.id,
     reference: prod.reference,
     color: prod.color,
-    grid_type: prod.gridType // Correção do nome da coluna
+    grid_type: prod.gridType,
+    stock: prod.stock,
+    enforce_stock: prod.enforceStock
   };
 
   const { error } = await supabase.from('products').insert(dbProd);
   if (error) throw error;
 };
 
+export const updateProductStock = async (id: string, newStock: any): Promise<void> => {
+    const { error } = await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', id);
+    if (error) throw error;
+}
+
 export const deleteProduct = async (id: string): Promise<void> => {
   const { error } = await supabase.from('products').delete().eq('id', id);
   if (error) throw error;
+};
+
+// Função para dar baixa no estoque após um pedido
+export const updateStockAfterOrder = async (items: OrderItem[]): Promise<void> => {
+    // Busca todos os produtos para ter o estado atual
+    const currentProducts = await getProducts();
+
+    for (const item of items) {
+        // Encontra o produto correspondente no banco (Ref + Cor)
+        const product = currentProducts.find(
+            p => p.reference === item.reference && p.color === item.color
+        );
+
+        if (product) {
+            const newStock = { ...product.stock };
+            
+            // Subtrai as quantidades
+            Object.entries(item.sizes).forEach(([size, qty]) => {
+                const currentQty = newStock[size] || 0;
+                newStock[size] = currentQty - qty;
+            });
+
+            // Atualiza no banco
+            await updateProductStock(product.id, newStock);
+        }
+    }
 };
 
 // --- REP PRICES ---
@@ -182,8 +220,6 @@ export const getOrders = async (): Promise<Order[]> => {
   }
 
   return data?.map((row: any) => {
-    // Robustez: Garante que items seja sempre um array, 
-    // mesmo se tiver salvo no formato antigo ou novo
     let items = row.items;
     if (items && !Array.isArray(items) && items.list) {
         items = items.list; 
@@ -205,7 +241,6 @@ export const getOrders = async (): Promise<Order[]> => {
       status: row.status,
       items: Array.isArray(items) ? items : [], 
       totalPieces: row.total_pieces || row.totalPieces,
-      // Mapeamento correto das colunas financeiras
       subtotalValue: row.subtotal_value || row.subtotalValue || 0,
       discountType: row.discount_type || row.discountType || null,
       discountValue: row.discount_value || row.discountValue || 0,
@@ -215,8 +250,8 @@ export const getOrders = async (): Promise<Order[]> => {
 };
 
 export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order | null> => {
+  // 1. Sequencial do ID
   let newSeq = 1000;
-
   try {
     const { data: seqData, error: seqError } = await supabase
       .from('app_config')
@@ -254,21 +289,31 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
     delivery_date: orderWithSeq.deliveryDate,
     payment_method: orderWithSeq.paymentMethod,
     status: orderWithSeq.status,
-    items: orderWithSeq.items, // Salva items normalmente como JSON
+    items: orderWithSeq.items, 
     total_pieces: orderWithSeq.totalPieces,
-    // Agora usando as colunas reais
     subtotal_value: orderWithSeq.subtotalValue,
     discount_type: orderWithSeq.discountType,
     discount_value: orderWithSeq.discountValue,
     final_total_value: orderWithSeq.finalTotalValue
   };
 
+  // 2. Salva o Pedido
   const { error } = await supabase.from('orders').insert(dbOrder);
   
   if (error) {
     console.error("Erro ao criar pedido (Supabase):", error);
     throw new Error(error.message || "Erro desconhecido ao salvar no banco");
   }
+
+  // 3. Atualiza o Estoque
+  try {
+      await updateStockAfterOrder(orderWithSeq.items);
+  } catch (err) {
+      console.error("Pedido salvo, mas erro ao atualizar estoque:", err);
+      // Não damos throw aqui para não "cancelar" o pedido na visão do usuário,
+      // mas idealmente deveria haver um tratamento de transação.
+  }
+
   return orderWithSeq as Order;
 };
 

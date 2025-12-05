@@ -1,14 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
-import { ProductDef, SizeGridType } from '../types';
+import { ProductDef, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, addProduct, deleteProduct, generateUUID } from '../services/storageService';
-import { Trash, Plus, Shirt, Loader2 } from 'lucide-react';
+import { Trash, Plus, Shirt, Loader2, Package } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
   const [newRef, setNewRef] = useState('');
   const [newColor, setNewColor] = useState('');
   const [newGrid, setNewGrid] = useState<SizeGridType>(SizeGridType.ADULT);
+  
+  // Novos estados para estoque
+  const [initialStock, setInitialStock] = useState<{[key: string]: string}>({});
+  const [enforceStock, setEnforceStock] = useState(false);
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,6 +27,11 @@ const ProductManager: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Limpa os inputs de estoque quando muda a grade
+  useEffect(() => {
+    setInitialStock({});
+  }, [newGrid]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,16 +53,27 @@ const ProductManager: React.FC = () => {
         return;
     }
 
+    // Converte inputs de estoque para números
+    const finalStock: {[key: string]: number} = {};
+    SIZE_GRIDS[newGrid].forEach(size => {
+        const val = parseInt(initialStock[size] || '0');
+        if (val > 0) finalStock[size] = val;
+    });
+
     try {
         await addProduct({
             id: generateUUID(),
             reference: newRef.toUpperCase(),
             color: newColor.toUpperCase(),
-            gridType: newGrid
+            gridType: newGrid,
+            stock: finalStock,
+            enforceStock: enforceStock
         });
 
         await fetchData();
-        setNewColor(''); // Keep Ref for faster entry
+        // Não limpa newRef para agilizar cadastro de cores
+        setNewColor('');
+        setInitialStock({});
     } catch (e: any) {
         setError('Erro: ' + e.message);
     }
@@ -68,7 +89,7 @@ const ProductManager: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-         <h2 className="text-2xl font-bold text-gray-800">Catálogo de Produtos</h2>
+         <h2 className="text-2xl font-bold text-gray-800">Catálogo de Produtos e Estoque</h2>
          {loading && <Loader2 className="animate-spin text-blue-600" />}
       </div>
       
@@ -76,73 +97,132 @@ const ProductManager: React.FC = () => {
         <h3 className="text-lg font-semibold mb-4 text-gray-700">Cadastrar Novo Produto</h3>
         {error && <div className="mb-4 text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
         
-        <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Referência</label>
-            <input 
-                type="text" 
-                className="w-full border p-2 rounded uppercase focus:ring-2 focus:ring-blue-500"
-                value={newRef}
-                onChange={(e) => setNewRef(e.target.value)}
-                placeholder="EX: CAMISA-01"
-                disabled={loading}
-            />
+        <form onSubmit={handleAdd} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Referência</label>
+              <input 
+                  type="text" 
+                  className="w-full border p-2 rounded uppercase focus:ring-2 focus:ring-blue-500"
+                  value={newRef}
+                  onChange={(e) => setNewRef(e.target.value)}
+                  placeholder="EX: CAMISA-01"
+                  disabled={loading}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
+              <input 
+                  type="text" 
+                  className="w-full border p-2 rounded uppercase focus:ring-2 focus:ring-blue-500"
+                  value={newColor}
+                  onChange={(e) => setNewColor(e.target.value)}
+                  placeholder="EX: AZUL MARINHO"
+                  disabled={loading}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Grade de Tamanho</label>
+              <select 
+                  className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500"
+                  value={newGrid}
+                  onChange={(e) => setNewGrid(e.target.value as SizeGridType)}
+                  disabled={loading}
+              >
+                  <option value={SizeGridType.ADULT}>Normal (P, M, G, GG)</option>
+                  <option value={SizeGridType.PLUS}>Plus Size (G1, G2, G3)</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cor</label>
-            <input 
-                type="text" 
-                className="w-full border p-2 rounded uppercase focus:ring-2 focus:ring-blue-500"
-                value={newColor}
-                onChange={(e) => setNewColor(e.target.value)}
-                placeholder="EX: AZUL MARINHO"
-                disabled={loading}
-            />
+
+          {/* Área de Estoque Inicial */}
+          <div className="bg-gray-50 p-4 rounded border border-gray-200">
+             <div className="flex justify-between items-center mb-2">
+                 <h4 className="text-sm font-bold text-gray-700 flex items-center">
+                    <Package className="w-4 h-4 mr-2" /> Estoque Inicial
+                 </h4>
+                 <label className="flex items-center text-sm cursor-pointer select-none">
+                    <input 
+                        type="checkbox" 
+                        className="mr-2 w-4 h-4 text-blue-600 rounded"
+                        checked={enforceStock}
+                        onChange={(e) => setEnforceStock(e.target.checked)}
+                    />
+                    <span className={`${enforceStock ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                        Bloquear venda sem estoque
+                    </span>
+                 </label>
+             </div>
+             
+             <div className="flex flex-wrap gap-4">
+                {SIZE_GRIDS[newGrid].map(size => (
+                    <div key={size} className="w-20">
+                        <label className="block text-xs font-bold text-center mb-1 text-gray-500">{size}</label>
+                        <input 
+                            type="number"
+                            min="0"
+                            className="w-full border p-2 text-center rounded focus:ring-2 focus:ring-blue-500"
+                            placeholder="0"
+                            value={initialStock[size] || ''}
+                            onChange={(e) => setInitialStock({...initialStock, [size]: e.target.value})}
+                        />
+                    </div>
+                ))}
+             </div>
+             <p className="text-xs text-gray-400 mt-2">Deixe em branco ou 0 para iniciar sem estoque.</p>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Grade de Tamanho</label>
-            <select 
-                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500"
-                value={newGrid}
-                onChange={(e) => setNewGrid(e.target.value as SizeGridType)}
-                disabled={loading}
-            >
-                <option value={SizeGridType.ADULT}>Normal (P, M, G, GG)</option>
-                <option value={SizeGridType.PLUS}>Plus Size (G1, G2, G3)</option>
-            </select>
-          </div>
+
           <button 
             type="submit"
             disabled={loading}
-            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center h-[42px] mt-4 md:mt-0"
+            className="w-full md:w-auto bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 font-medium flex justify-center items-center"
           >
-            <Plus className="w-5 h-5 mr-2" /> Adicionar
+            <Plus className="w-5 h-5 mr-2" /> Adicionar Produto
           </button>
         </form>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[600px]">
+            <table className="w-full text-left min-w-[800px]">
                 <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-sm">
                     <tr>
                         <th className="p-4">Referência</th>
                         <th className="p-4">Cor</th>
                         <th className="p-4">Grade</th>
+                        <th className="p-4 text-center">Controle Estoque</th>
+                        <th className="p-4">Resumo Estoque</th>
                         <th className="p-4 text-right">Ações</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y">
                     {products.length === 0 && !loading && (
-                        <tr><td colSpan={4} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
+                        <tr><td colSpan={6} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
                     )}
-                    {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => (
+                    {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => {
+                        const totalStock = prod.stock ? Object.values(prod.stock).reduce((a: number, b: number) => a + b, 0) : 0;
+                        return (
                         <tr key={prod.id} className="hover:bg-gray-50">
                             <td className="p-4 font-bold">{prod.reference}</td>
                             <td className="p-4 uppercase">{prod.color}</td>
                             <td className="p-4 text-sm text-gray-500">
                                 {prod.gridType === SizeGridType.ADULT && 'Normal'}
                                 {prod.gridType === SizeGridType.PLUS && 'Plus Size'}
+                            </td>
+                            <td className="p-4 text-center">
+                                {prod.enforceStock ? (
+                                    <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">Travado</span>
+                                ) : (
+                                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Livre</span>
+                                )}
+                            </td>
+                            <td className="p-4 text-sm">
+                                <span className="font-bold text-gray-700">{totalStock} peças</span>
+                                <div className="text-xs text-gray-400 mt-1 flex flex-wrap gap-1">
+                                    {Object.entries(prod.stock || {}).map(([s, q]) => (
+                                        (q as number) > 0 && <span key={s} className="bg-gray-100 px-1 rounded">{s}:{(q as number)}</span>
+                                    ))}
+                                </div>
                             </td>
                             <td className="p-4 text-right">
                                 <button 
@@ -154,7 +234,8 @@ const ProductManager: React.FC = () => {
                                 </button>
                             </td>
                         </tr>
-                    ))}
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
