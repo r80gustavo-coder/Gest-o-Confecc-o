@@ -2,13 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { ProductDef, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, addProduct, deleteProduct, updateProductInventory, generateUUID } from '../services/storageService';
-import { Trash, Plus, Loader2, Package, Edit2, X, Save } from 'lucide-react';
+import { Trash, Plus, Loader2, Package, Edit2, X, Save, DollarSign } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
   const [newRef, setNewRef] = useState('');
   const [newColor, setNewColor] = useState('');
   const [newGrid, setNewGrid] = useState<SizeGridType>(SizeGridType.ADULT);
+  const [newBasePrice, setNewBasePrice] = useState(''); // Novo state para preço de custo
   
   // Novos estados para cadastro de estoque
   const [initialStock, setInitialStock] = useState<{[key: string]: string}>({});
@@ -18,6 +19,7 @@ const ProductManager: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<ProductDef | null>(null);
   const [editStockValues, setEditStockValues] = useState<{[key: string]: string}>({});
   const [editEnforceStock, setEditEnforceStock] = useState(false);
+  const [editBasePrice, setEditBasePrice] = useState(''); // State para edição de preço
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,13 +74,15 @@ const ProductManager: React.FC = () => {
             color: newColor.toUpperCase(),
             gridType: newGrid,
             stock: finalStock,
-            enforceStock: enforceStock
+            enforceStock: enforceStock,
+            basePrice: parseFloat(newBasePrice) || 0
         });
 
         await fetchData();
         // Não limpa newRef para agilizar cadastro de cores
         setNewColor('');
         setInitialStock({});
+        setNewBasePrice('');
     } catch (e: any) {
         setError('Erro: ' + e.message);
     }
@@ -95,6 +99,7 @@ const ProductManager: React.FC = () => {
   const handleEditClick = (product: ProductDef) => {
     setEditingProduct(product);
     setEditEnforceStock(product.enforceStock);
+    setEditBasePrice(product.basePrice ? product.basePrice.toString() : '');
     
     // Converte o estoque atual (number) para string para os inputs
     const stockStrings: {[key: string]: string} = {};
@@ -111,21 +116,20 @@ const ProductManager: React.FC = () => {
     setLoading(true);
     
     try {
-        // Agora aceitamos valores negativos ou zero na edição se necessário, 
-        // mas geralmente salvamos o que o usuário digita.
-        // Se o input estiver vazio, assume 0.
         const finalStock: {[key: string]: number} = {};
         SIZE_GRIDS[editingProduct.gridType].forEach(size => {
             const val = parseInt(editStockValues[size] || '0');
             if (!isNaN(val)) finalStock[size] = val;
         });
 
-        await updateProductInventory(editingProduct.id, finalStock, editEnforceStock);
+        const finalBasePrice = parseFloat(editBasePrice) || 0;
+
+        await updateProductInventory(editingProduct.id, finalStock, editEnforceStock, finalBasePrice);
         
         await fetchData();
         setEditingProduct(null);
     } catch (e: any) {
-        alert("Erro ao atualizar estoque: " + e.message);
+        alert("Erro ao atualizar estoque/preço: " + e.message);
     } finally {
         setLoading(false);
     }
@@ -144,7 +148,7 @@ const ProductManager: React.FC = () => {
         {error && <div className="mb-4 text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
         
         <form onSubmit={handleAdd} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Referência</label>
               <input 
@@ -168,16 +172,31 @@ const ProductManager: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Grade de Tamanho</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
               <select 
                   className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500"
                   value={newGrid}
                   onChange={(e) => setNewGrid(e.target.value as SizeGridType)}
                   disabled={loading}
               >
-                  <option value={SizeGridType.ADULT}>Normal (P, M, G, GG)</option>
-                  <option value={SizeGridType.PLUS}>Plus Size (G1, G2, G3)</option>
+                  <option value={SizeGridType.ADULT}>Normal (P-GG)</option>
+                  <option value={SizeGridType.PLUS}>Plus (G1-G3)</option>
               </select>
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Preço Custo (Base)</label>
+              <div className="relative">
+                  <span className="absolute left-2 top-2 text-gray-500 text-sm">R$</span>
+                  <input 
+                      type="number" 
+                      step="0.01"
+                      className="w-full border p-2 pl-8 rounded focus:ring-2 focus:ring-blue-500"
+                      value={newBasePrice}
+                      onChange={(e) => setNewBasePrice(e.target.value)}
+                      placeholder="0.00"
+                      disabled={loading}
+                  />
+              </div>
             </div>
           </div>
 
@@ -231,12 +250,13 @@ const ProductManager: React.FC = () => {
       {/* Lista de Produtos */}
       <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[800px]">
+            <table className="w-full text-left min-w-[900px]">
                 <thead className="bg-gray-50 text-gray-600 font-bold uppercase text-sm">
                     <tr>
                         <th className="p-4">Referência</th>
                         <th className="p-4">Cor</th>
                         <th className="p-4">Grade</th>
+                        <th className="p-4">Custo Base</th>
                         <th className="p-4 text-center">Controle Estoque</th>
                         <th className="p-4">Resumo Estoque</th>
                         <th className="p-4 text-right">Ações</th>
@@ -244,7 +264,7 @@ const ProductManager: React.FC = () => {
                 </thead>
                 <tbody className="divide-y">
                     {products.length === 0 && !loading && (
-                        <tr><td colSpan={6} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
+                        <tr><td colSpan={7} className="p-6 text-center text-gray-400">Nenhum produto cadastrado.</td></tr>
                     )}
                     {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(prod => {
                         const totalStock = prod.stock ? (Object.values(prod.stock) as number[]).reduce((a, b) => a + b, 0) : 0;
@@ -255,6 +275,9 @@ const ProductManager: React.FC = () => {
                             <td className="p-4 text-sm text-gray-500">
                                 {prod.gridType === SizeGridType.ADULT && 'Normal'}
                                 {prod.gridType === SizeGridType.PLUS && 'Plus Size'}
+                            </td>
+                            <td className="p-4 font-bold text-gray-700">
+                                R$ {(prod.basePrice || 0).toFixed(2)}
                             </td>
                             <td className="p-4 text-center">
                                 {prod.enforceStock ? (
@@ -285,7 +308,7 @@ const ProductManager: React.FC = () => {
                                 <button 
                                     onClick={() => handleEditClick(prod)}
                                     className="text-blue-600 hover:bg-blue-50 p-2 rounded transition"
-                                    title="Editar Estoque"
+                                    title="Editar Estoque e Preço"
                                 >
                                     <Edit2 className="w-5 h-5" />
                                 </button>
@@ -312,7 +335,7 @@ const ProductManager: React.FC = () => {
                 <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
                     <h3 className="font-bold text-lg text-gray-800 flex items-center">
                         <Edit2 className="w-5 h-5 mr-2 text-blue-600" />
-                        Editar Estoque
+                        Editar Estoque e Preço
                     </h3>
                     <button onClick={() => setEditingProduct(null)} className="text-gray-400 hover:text-gray-600">
                         <X className="w-6 h-6" />
@@ -323,6 +346,21 @@ const ProductManager: React.FC = () => {
                     <div className="mb-4 bg-blue-50 p-3 rounded border border-blue-100">
                         <p className="text-sm text-blue-900"><strong>Referência:</strong> {editingProduct.reference}</p>
                         <p className="text-sm text-blue-900"><strong>Cor:</strong> {editingProduct.color}</p>
+                    </div>
+                    
+                    {/* Campo Preço Base na Edição */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-bold text-gray-700 mb-1">Preço de Custo (Base)</label>
+                        <div className="relative">
+                            <span className="absolute left-2 top-2 text-gray-500 text-sm">R$</span>
+                            <input 
+                                type="number" 
+                                step="0.01"
+                                className="w-full border p-2 pl-8 rounded focus:ring-2 focus:ring-blue-500"
+                                value={editBasePrice}
+                                onChange={(e) => setEditBasePrice(e.target.value)}
+                            />
+                        </div>
                     </div>
 
                     <div className="mb-6">

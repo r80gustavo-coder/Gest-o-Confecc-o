@@ -52,8 +52,9 @@ export const getProducts = async (): Promise<ProductDef[]> => {
     reference: p.reference,
     color: p.color,
     gridType: p.grid_type || p.gridType,
-    stock: p.stock || {}, // Novo campo
-    enforceStock: p.enforce_stock || false // Novo campo
+    stock: p.stock || {}, 
+    enforceStock: p.enforce_stock || false,
+    basePrice: p.base_price || 0 // Mapeia o preço de custo
   })) as ProductDef[] || [];
 };
 
@@ -65,23 +66,28 @@ export const addProduct = async (prod: ProductDef): Promise<void> => {
     color: prod.color,
     grid_type: prod.gridType,
     stock: prod.stock,
-    enforce_stock: prod.enforceStock
+    enforce_stock: prod.enforceStock,
+    base_price: prod.basePrice // Salva o preço de custo
   };
 
   const { error } = await supabase.from('products').insert(dbProd);
   if (error) throw error;
 };
 
-// Função atualizada para editar estoque e configurações do produto
-export const updateProductInventory = async (id: string, newStock: any, enforceStock: boolean): Promise<void> => {
+// Função atualizada para editar estoque, preço base e configurações
+export const updateProductInventory = async (id: string, newStock: any, enforceStock: boolean, basePrice: number): Promise<void> => {
     const { error } = await supabase
         .from('products')
-        .update({ stock: newStock, enforce_stock: enforceStock })
+        .update({ 
+            stock: newStock, 
+            enforce_stock: enforceStock,
+            base_price: basePrice
+        })
         .eq('id', id);
     if (error) throw error;
 }
 
-// Mantendo compatibilidade com código antigo se houver, mas redirecionando
+// Mantendo compatibilidade com código antigo se houver
 export const updateProductStock = async (id: string, newStock: any): Promise<void> => {
     const { error } = await supabase
         .from('products')
@@ -115,8 +121,8 @@ export const updateStockAfterOrder = async (items: OrderItem[]): Promise<void> =
                 newStock[size] = currentQty - qty;
             });
 
-            // Atualiza no banco (mantém a config de enforceStock atual)
-            await updateProductInventory(product.id, newStock, product.enforceStock);
+            // Atualiza no banco (mantém configurações atuais)
+            await updateProductInventory(product.id, newStock, product.enforceStock, product.basePrice);
         }
     }
 };

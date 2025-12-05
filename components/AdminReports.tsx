@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Order, User, Role } from '../types';
-import { getOrders, getUsers } from '../services/storageService';
+import { Order, User, Role, ProductDef } from '../types';
+import { getOrders, getUsers, getProducts } from '../services/storageService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, PieChart, Pie } from 'recharts';
 import { Loader2, Calendar, Filter, Printer, Download, TrendingUp, Scissors, Users, Shirt } from 'lucide-react';
 
@@ -11,6 +11,7 @@ const ALL_POSSIBLE_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 const AdminReports: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [reps, setReps] = useState<User[]>([]);
+  const [products, setProducts] = useState<ProductDef[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -25,9 +26,10 @@ const AdminReports: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [o, u] = await Promise.all([getOrders(), getUsers()]);
+      const [o, u, p] = await Promise.all([getOrders(), getUsers(), getProducts()]);
       setOrders(o);
       setReps(u.filter(x => x.role === Role.REP));
+      setProducts(p);
       setLoading(false);
     };
     load();
@@ -67,7 +69,7 @@ const AdminReports: React.FC = () => {
 
   const matrixList = Object.values(matrixData).sort((a,b) => a.ref.localeCompare(b.ref));
 
-  // 2. Sales by Rep
+  // 2. Sales by Rep (Ainda usa o valor da venda real para medir performance do vendedor em R$)
   const repSales: Record<string, number> = {};
   const repPieces: Record<string, number> = {};
   
@@ -100,7 +102,18 @@ const AdminReports: React.FC = () => {
   })).filter(d => d.value > 0);
 
   // 4. Totais Gerais
-  const totalRevenue = filteredOrders.reduce((acc, o) => acc + (o.finalTotalValue || 0), 0);
+  // ATUALIZAÇÃO: Faturamento Total calculado com base no PREÇO DE CUSTO do Catálogo
+  let totalRevenue = 0;
+  
+  filteredOrders.forEach(o => {
+      o.items.forEach(item => {
+          // Busca o produto correspondente no catálogo atual para pegar o custo base
+          const catalogProduct = products.find(p => p.reference === item.reference && p.color === item.color);
+          const baseCost = catalogProduct ? catalogProduct.basePrice : 0;
+          totalRevenue += (item.totalQty * baseCost);
+      });
+  });
+
   const totalPiecesSold = filteredOrders.reduce((acc, o) => acc + o.totalPieces, 0);
   const totalOrdersCount = filteredOrders.length;
 
@@ -119,7 +132,7 @@ const AdminReports: React.FC = () => {
                     <h2 className="text-2xl font-bold text-gray-900 flex items-center">
                         <TrendingUp className="w-6 h-6 mr-2 text-blue-600" /> Relatórios de Vendas & Produção
                     </h2>
-                    <p className="text-gray-500 text-sm mt-1">Análise detalhada de desempenho e matriz de corte.</p>
+                    <p className="text-gray-500 text-sm mt-1">Análise detalhada e Matriz de Corte.</p>
                 </div>
                 <button 
                     onClick={handlePrint}
@@ -184,8 +197,9 @@ const AdminReports: React.FC = () => {
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-l-4 border-l-green-500 border-gray-100">
-                <p className="text-sm font-bold text-gray-500 uppercase mb-1">Faturamento Total</p>
+                <p className="text-sm font-bold text-gray-500 uppercase mb-1">Faturamento Total (Base)</p>
                 <p className="text-3xl font-bold text-gray-900">R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs text-green-600 mt-1">*Calculado sobre Preço de Custo configurado</p>
             </div>
             <div className="bg-white p-6 rounded-lg shadow-sm border border-l-4 border-l-blue-500 border-gray-100">
                 <p className="text-sm font-bold text-gray-500 uppercase mb-1">Peças Vendidas</p>
@@ -204,7 +218,7 @@ const AdminReports: React.FC = () => {
             {/* Sales by Rep */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-                    <Users className="w-5 h-5 mr-2 text-blue-600" /> Ranking de Representantes
+                    <Users className="w-5 h-5 mr-2 text-blue-600" /> Ranking de Representantes (Vendas Reais)
                 </h3>
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
