@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, Role } from '../types';
-import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X, DollarSign } from 'lucide-react';
+import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X, DollarSign, FileBarChart } from 'lucide-react';
 
 interface LayoutProps {
   user: User;
@@ -43,6 +43,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
           {isAdmin ? (
             <>
               <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard Geral" />
+              <NavItem id="reports" icon={FileBarChart} label="Relatórios & Matriz" />
               <NavItem id="orders" icon={Package} label="Pedidos & Produção" />
               <NavItem id="products" icon={Shirt} label="Catálogo Produtos" />
               <NavItem id="reps" icon={Users} label="Representantes" />
@@ -84,6 +85,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
             {isAdmin ? (
               <>
                 <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
+                <NavItem id="reports" icon={FileBarChart} label="Relatórios" />
                 <NavItem id="orders" icon={Package} label="Pedidos" />
                 <NavItem id="products" icon={Shirt} label="Produtos" />
                 <NavItem id="reps" icon={Users} label="Representantes" />

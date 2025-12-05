@@ -10,6 +10,7 @@ import ClientManager from './components/ClientManager';
 import RepOrderForm from './components/RepOrderForm';
 import RepOrderList from './components/RepOrderList';
 import RepPriceManager from './components/RepPriceManager';
+import AdminReports from './components/AdminReports';
 import { User, Role } from './types';
 import { initializeStorage } from './services/storageService';
 
@@ -61,6 +62,7 @@ const App: React.FC = () => {
       {user.role === Role.ADMIN && (
         <>
           {activeTab === 'dashboard' && <AdminDashboard onNavigate={setActiveTab} />}
+          {activeTab === 'reports' && <AdminReports />}
           {activeTab === 'orders' && <AdminOrderList />}
           {activeTab === 'products' && <ProductManager />}
           {activeTab === 'reps' && <RepManager />}
