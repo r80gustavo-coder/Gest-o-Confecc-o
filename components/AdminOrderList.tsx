@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem } from '../types';
-import { getOrders, updateOrderStatus } from '../services/storageService';
-import { Printer, Calculator, CheckCircle, X, Loader2 } from 'lucide-react';
+import { getOrders, updateOrderStatus, saveOrderPicking } from '../services/storageService';
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
@@ -17,6 +17,11 @@ const AdminOrderList: React.FC = () => {
   
   // Aggregation Modal State
   const [showAggregation, setShowAggregation] = useState(false);
+
+  // Separation Modal State
+  const [pickingOrder, setPickingOrder] = useState<Order | null>(null);
+  const [pickingItems, setPickingItems] = useState<OrderItem[]>([]);
+  const [savingPicking, setSavingPicking] = useState(false);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -51,6 +56,53 @@ const AdminOrderList: React.FC = () => {
     }
   };
 
+  // --- SEPARATION LOGIC ---
+  const openPickingModal = (order: Order) => {
+      // Deep clone items to avoid mutating state directly
+      const itemsCopy = order.items.map(item => ({
+          ...item,
+          sizes: { ...item.sizes },
+          picked: item.picked ? { ...item.picked } : {} 
+      }));
+      setPickingOrder(order);
+      setPickingItems(itemsCopy);
+  };
+
+  const handlePickingChange = (itemIdx: number, size: string, val: string) => {
+      const num = parseInt(val);
+      const newItems = [...pickingItems];
+      if (!newItems[itemIdx].picked) newItems[itemIdx].picked = {};
+      
+      // Validação simples: não pode ser negativo
+      if (!isNaN(num) && num >= 0) {
+          // Opcional: Validar se é maior que o pedido? O usuário pode querer separar a mais por erro, vamos permitir mas avisar visualmente talvez.
+          // Por enquanto, livre.
+          newItems[itemIdx].picked![size] = num;
+      } else if (val === '') {
+          delete newItems[itemIdx].picked![size];
+      }
+      setPickingItems(newItems);
+  };
+
+  const savePicking = async () => {
+      if (!pickingOrder) return;
+      setSavingPicking(true);
+      try {
+          await saveOrderPicking(pickingOrder.id, pickingOrder.items, pickingItems);
+          
+          // Atualiza lista local
+          const updatedOrders = orders.map(o => o.id === pickingOrder.id ? { ...o, items: pickingItems } : o);
+          setOrders(updatedOrders);
+          
+          setPickingOrder(null);
+      } catch (e: any) {
+          alert("Erro ao salvar separação: " + e.message);
+      } finally {
+          setSavingPicking(false);
+      }
+  };
+
+  // --- PRINT LOGIC ---
   const handlePrintIndividual = async (order: Order) => {
     const printContent = document.getElementById(`print-order-${order.id}`);
     if (printContent) {
@@ -287,10 +339,18 @@ const AdminOrderList: React.FC = () => {
                       </span>
                     )}
                   </td>
-                  <td className="p-4 text-right">
+                  <td className="p-4 text-right flex items-center justify-end gap-2">
+                    <button
+                        onClick={() => openPickingModal(order)}
+                        className="text-orange-500 hover:text-orange-700 hover:bg-orange-50 p-2 rounded transition"
+                        title="Separação de Pedido / Baixa Estoque"
+                    >
+                        <PackageOpen className="w-5 h-5" />
+                    </button>
+
                     <button 
                       onClick={() => handlePrintIndividual(order)}
-                      className="text-gray-500 hover:text-blue-600 transition p-2"
+                      className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition p-2 rounded"
                       title="Imprimir Pedido"
                     >
                       <Printer className="w-5 h-5" />
@@ -397,6 +457,93 @@ const AdminOrderList: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* SEPARATION / PICKING MODAL */}
+      {pickingOrder && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4 animate-fade-in">
+              <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
+                   <div className="p-4 border-b flex justify-between items-center bg-orange-50 rounded-t-lg">
+                        <div>
+                            <h2 className="text-lg font-bold text-orange-900 flex items-center">
+                                <PackageOpen className="w-6 h-6 mr-2" /> Separação de Pedido #{pickingOrder.displayId}
+                            </h2>
+                            <p className="text-xs text-orange-700 mt-1">
+                                Digite a quantidade separada. A baixa de estoque ocorre ao salvar.
+                            </p>
+                        </div>
+                        <button onClick={() => setPickingOrder(null)} className="p-2 hover:bg-orange-100 rounded-full">
+                            <X className="w-6 h-6 text-orange-800" />
+                        </button>
+                    </div>
+
+                    <div className="p-4 overflow-y-auto flex-1 bg-gray-50">
+                        <table className="w-full text-sm border-collapse bg-white shadow-sm rounded-lg">
+                            <thead>
+                                <tr className="bg-gray-100 text-gray-700">
+                                    <th className="p-3 text-left">Produto</th>
+                                    <th className="p-3 text-center">Tamanhos</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {pickingItems.map((item, idx) => (
+                                    <tr key={idx}>
+                                        <td className="p-3">
+                                            <p className="font-bold text-gray-800">{item.reference}</p>
+                                            <p className="text-xs uppercase text-gray-500">{item.color}</p>
+                                        </td>
+                                        <td className="p-3">
+                                            <div className="flex flex-wrap gap-4 justify-center">
+                                                {Object.entries(item.sizes).map(([size, qty]) => {
+                                                    const picked = item.picked?.[size] || 0;
+                                                    const isComplete = picked >= qty;
+                                                    return (
+                                                        <div key={size} className="flex flex-col items-center border rounded p-2 bg-gray-50">
+                                                            <span className="text-xs font-bold text-gray-500 mb-1">{size}</span>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-xs text-gray-400 mr-1">Ped:</span>
+                                                                <span className="font-bold text-gray-800 text-sm">{qty}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 mt-1">
+                                                                <span className="text-xs text-blue-600 mr-1 font-bold">Sep:</span>
+                                                                <input 
+                                                                    type="number" 
+                                                                    min="0"
+                                                                    className={`w-12 text-center border rounded p-1 font-bold outline-none focus:ring-2 focus:ring-blue-500 ${isComplete ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white'}`}
+                                                                    value={item.picked?.[size] !== undefined ? item.picked[size] : ''}
+                                                                    placeholder="0"
+                                                                    onChange={(e) => handlePickingChange(idx, size, e.target.value)}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="p-4 border-t bg-white rounded-b-lg flex justify-end gap-3">
+                         <button 
+                             onClick={() => setPickingOrder(null)}
+                             className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                         >
+                             Cancelar
+                         </button>
+                         <button 
+                             onClick={savePicking}
+                             disabled={savingPicking}
+                             className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center shadow-sm disabled:opacity-50"
+                         >
+                             {savingPicking ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                             Salvar e Atualizar Estoque
+                         </button>
+                    </div>
+              </div>
+          </div>
+      )}
 
       {/* Aggregation Modal */}
       {showAggregation && (

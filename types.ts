@@ -47,7 +47,8 @@ export interface OrderItem {
   reference: string;
   color: string;
   gridType: SizeGridType;
-  sizes: { [size: string]: number }; // e.g. { "P": 10, "M": 5 }
+  sizes: { [size: string]: number }; // e.g. { "P": 10, "M": 5 } (Quantidade Pedida)
+  picked?: { [size: string]: number }; // NOVO: Quantidade Separada/Bipada
   totalQty: number;
   unitPrice: number; // Preço unitário no momento da venda
   totalItemValue: number; // unitPrice * totalQty

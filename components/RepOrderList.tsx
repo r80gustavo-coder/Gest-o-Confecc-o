@@ -183,48 +183,69 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
         </div>
         
         <div className="grid gap-4">
-            {filteredOrders.map(order => (
-                <div key={order.id} className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-400 flex flex-col md:flex-row justify-between items-center">
-                    <div className="mb-2 md:mb-0">
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg text-blue-900">Pedido #{order.displayId}</span>
-                            <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
-                        </div>
-                        <div className="text-gray-700 font-medium">{order.clientName}</div>
-                        <div className="text-sm text-gray-500 mt-1">
-                            {order.totalPieces} peças • <span className="text-green-600 font-bold">R$ {(order.finalTotalValue || 0).toFixed(2)}</span>
-                        </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                        {order.status === 'printed' ? (
-                            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
-                                <CheckCircle className="w-4 h-4 mr-2" /> Processado
+            {filteredOrders.map(order => {
+                // Cálculo de progresso de separação
+                let totalSeparado = 0;
+                let totalPedido = order.totalPieces;
+                order.items.forEach(item => {
+                    if (item.picked) {
+                        // Cast Object.values to number[] to avoid 'unknown' type errors
+                        totalSeparado += (Object.values(item.picked) as number[]).reduce((a, b) => a + b, 0);
+                    }
+                });
+                
+                return (
+                    <div key={order.id} className="bg-white p-4 rounded-lg shadow border-l-4 border-blue-400 flex flex-col md:flex-row justify-between items-center">
+                        <div className="mb-2 md:mb-0">
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-lg text-blue-900">Pedido #{order.displayId}</span>
+                                <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
                             </div>
-                        ) : (
-                            <div className="flex items-center text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
-                                <Clock className="w-4 h-4 mr-2" /> Aguardando
+                            <div className="text-gray-700 font-medium">{order.clientName}</div>
+                            <div className="text-sm text-gray-500 mt-1">
+                                {order.totalPieces} peças • <span className="text-green-600 font-bold">R$ {(order.finalTotalValue || 0).toFixed(2)}</span>
                             </div>
-                        )}
+                             {/* Indicador de Separação */}
+                             {totalSeparado > 0 && (
+                                <div className="mt-2 text-xs bg-gray-100 inline-block px-2 py-1 rounded border border-gray-200">
+                                    <span className="text-gray-500">Separação:</span> 
+                                    <span className={`font-bold ml-1 ${totalSeparado === totalPedido ? 'text-green-600' : 'text-orange-600'}`}>
+                                        {totalSeparado} / {totalPedido}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                         
-                        <button 
-                            onClick={() => handlePrint(order)}
-                            className="text-gray-600 hover:bg-gray-100 p-2 rounded-full transition"
-                            title="Imprimir Pedido"
-                        >
-                            <Printer className="w-5 h-5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {order.status === 'printed' ? (
+                                <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
+                                    <CheckCircle className="w-4 h-4 mr-2" /> Processado
+                                </div>
+                            ) : (
+                                <div className="flex items-center text-yellow-600 bg-yellow-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
+                                    <Clock className="w-4 h-4 mr-2" /> Aguardando
+                                </div>
+                            )}
+                            
+                            <button 
+                                onClick={() => handlePrint(order)}
+                                className="text-gray-600 hover:bg-gray-100 p-2 rounded-full transition"
+                                title="Imprimir Pedido"
+                            >
+                                <Printer className="w-5 h-5" />
+                            </button>
 
-                        <button 
-                           onClick={() => setViewOrder(order)}
-                           className="text-blue-600 hover:bg-blue-50 p-2 rounded-full transition"
-                           title="Ver Detalhes"
-                        >
-                            <Eye className="w-5 h-5" />
-                        </button>
+                            <button 
+                            onClick={() => setViewOrder(order)}
+                            className="text-blue-600 hover:bg-blue-50 p-2 rounded-full transition"
+                            title="Ver Detalhes"
+                            >
+                                <Eye className="w-5 h-5" />
+                            </button>
+                        </div>
                     </div>
-                </div>
-            ))}
+                );
+            })}
             {filteredOrders.length === 0 && (
                 <div className="text-center py-12 bg-white rounded-lg border border-dashed">
                     <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
@@ -264,7 +285,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 <tr>
                                     <th className="border p-2 text-left">Ref</th>
                                     <th className="border p-2 text-left">Cor</th>
-                                    <th className="border p-2 text-center">Grade</th>
+                                    <th className="border p-2 text-center">Grade (Separado/Pedido)</th>
                                     <th className="border p-2 text-right">Qtd</th>
                                     <th className="border p-2 text-right">Total</th>
                                 </tr>
@@ -275,11 +296,18 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                         <td className="border p-2 font-medium">{item.reference}</td>
                                         <td className="border p-2">{item.color}</td>
                                         <td className="border p-2 text-center">
-                                            {Object.entries(item.sizes).map(([s, q]) => (
-                                                <span key={s} className="bg-gray-100 px-1 mx-1 rounded text-xs">
-                                                    {s}:{q}
-                                                </span>
-                                            ))}
+                                            {Object.entries(item.sizes).map(([s, q]) => {
+                                                const p = (item.picked?.[s] as number) || 0;
+                                                // Exibe: SEPARADO / PEDIDO se houver separação, senão só PEDIDO
+                                                const display = p > 0 ? `${p}/${q}` : `${q}`;
+                                                const style = p >= q && q > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100';
+                                                
+                                                return (
+                                                    <span key={s} className={`${style} px-1 mx-1 rounded text-xs border border-gray-200`}>
+                                                        {s}: {display}
+                                                    </span>
+                                                )
+                                            })}
                                         </td>
                                         <td className="border p-2 text-right font-bold">{item.totalQty}</td>
                                         <td className="border p-2 text-right">R$ {(item.totalItemValue || 0).toFixed(2)}</td>

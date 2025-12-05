@@ -101,31 +101,83 @@ export const deleteProduct = async (id: string): Promise<void> => {
   if (error) throw error;
 };
 
-// Função para dar baixa no estoque após um pedido
-export const updateStockAfterOrder = async (items: OrderItem[]): Promise<void> => {
-    // Busca todos os produtos para ter o estado atual
+// --- LOGICA DE ESTOQUE ---
+
+// Função chamada na CRIAÇÃO do pedido.
+// Regra: Só baixa estoque se enforceStock == true.
+export const updateStockOnOrderCreation = async (items: OrderItem[]): Promise<void> => {
     const currentProducts = await getProducts();
 
     for (const item of items) {
-        // Encontra o produto correspondente no banco (Ref + Cor)
         const product = currentProducts.find(
             p => p.reference === item.reference && p.color === item.color
         );
 
-        if (product) {
+        // Só baixa na hora do pedido se estiver Travado (enforceStock = true)
+        if (product && product.enforceStock) {
             const newStock = { ...product.stock };
             
-            // Subtrai as quantidades
             Object.entries(item.sizes).forEach(([size, qty]) => {
                 const currentQty = newStock[size] || 0;
                 newStock[size] = currentQty - qty;
             });
 
-            // Atualiza no banco (mantém configurações atuais)
             await updateProductInventory(product.id, newStock, product.enforceStock, product.basePrice);
         }
     }
 };
+
+// Função para SALVAR A SEPARAÇÃO e baixar estoque de produtos "Livres".
+export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], newItems: OrderItem[]): Promise<void> => {
+    // 1. Atualiza o Pedido com os novos items (que contém o campo 'picked')
+    const { error } = await supabase
+        .from('orders')
+        .update({ items: newItems })
+        .eq('id', orderId);
+    
+    if (error) throw error;
+
+    // 2. Calcula diferença e atualiza estoque APENAS para produtos LIVRES (enforceStock = false)
+    const currentProducts = await getProducts();
+
+    for (let i = 0; i < newItems.length; i++) {
+        const newItem = newItems[i];
+        const oldItem = oldItems[i]; // Assume que a ordem dos itens não muda
+
+        const product = currentProducts.find(
+            p => p.reference === newItem.reference && p.color === newItem.color
+        );
+
+        // Se o produto existe e é LIVRE (enforceStock == false), controlamos o estoque na separação
+        if (product && !product.enforceStock) {
+            let stockChanged = false;
+            const newStock = { ...product.stock };
+
+            const newPicked = newItem.picked || {};
+            const oldPicked = oldItem.picked || {};
+
+            // Itera sobre os tamanhos para ver a diferença
+            const allSizes = new Set([...Object.keys(newPicked), ...Object.keys(oldPicked)]);
+            
+            allSizes.forEach(size => {
+                const qNew = newPicked[size] || 0;
+                const qOld = oldPicked[size] || 0;
+                const delta = qNew - qOld; // Se positivo, separou mais (baixa estoque). Se negativo, devolveu (sobe estoque).
+
+                if (delta !== 0) {
+                    const currentStockQty = newStock[size] || 0;
+                    newStock[size] = currentStockQty - delta;
+                    stockChanged = true;
+                }
+            });
+
+            if (stockChanged) {
+                 await updateProductInventory(product.id, newStock, product.enforceStock, product.basePrice);
+            }
+        }
+    }
+};
+
 
 // --- REP PRICES ---
 export const getRepPrices = async (repId: string): Promise<RepPrice[]> => {
@@ -321,13 +373,11 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
     throw new Error(error.message || "Erro desconhecido ao salvar no banco");
   }
 
-  // 3. Atualiza o Estoque
+  // 3. Atualiza o Estoque (SOMENTE para enforceStock=true)
   try {
-      await updateStockAfterOrder(orderWithSeq.items);
+      await updateStockOnOrderCreation(orderWithSeq.items);
   } catch (err) {
       console.error("Pedido salvo, mas erro ao atualizar estoque:", err);
-      // Não damos throw aqui para não "cancelar" o pedido na visão do usuário,
-      // mas idealmente deveria haver um tratamento de transação.
   }
 
   return orderWithSeq as Order;
