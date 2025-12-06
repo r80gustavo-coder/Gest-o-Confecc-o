@@ -365,17 +365,28 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                             {(() => {
                                 let modalTotalPieces = 0;
                                 let modalSubtotal = 0;
+                                
+                                // FLAG CRÍTICA: Se tem Romaneio, o cálculo é ESTRITO (só o que foi separado/bipado)
+                                const isFinalized = !!viewOrder.romaneio;
 
                                 const rows = viewOrder.items.map((item, idx) => {
-                                     // Lógica de Visualização do Modal permanece híbrida para conferência (Separado/Pedido)
                                      let rowTotal = 0;
                                      ALL_SIZES.forEach(s => {
-                                         const picked = item.picked && item.picked[s] !== undefined ? item.picked[s] : undefined;
-                                         const ordered = item.sizes && item.sizes[s] !== undefined ? item.sizes[s] : 0;
+                                         let numVal = 0;
                                          
-                                         // Se tem picked, usa. Se não, usa ordered.
-                                         const val = picked !== undefined ? picked : ordered;
-                                         const numVal = typeof val === 'number' ? val : 0;
+                                         if (isFinalized) {
+                                            // MODO ESTRITO (COM ROMANEIO): 
+                                            // Só conta para o total o que realmente foi separado.
+                                            numVal = item.picked ? (item.picked[s] || 0) : 0;
+                                         } else {
+                                            // MODO HÍBRIDO (SEM ROMANEIO):
+                                            // Se tem picked, usa. Se não, usa ordered (para projeção).
+                                            const picked = item.picked && item.picked[s] !== undefined ? item.picked[s] : undefined;
+                                            const ordered = item.sizes && item.sizes[s] !== undefined ? item.sizes[s] : 0;
+                                            
+                                            const val = picked !== undefined ? picked : ordered;
+                                            numVal = typeof val === 'number' ? val : 0;
+                                         }
                                          
                                          rowTotal += numVal;
                                      });
@@ -418,7 +429,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                                 })}
                                                 {(!item.sizes && !item.picked) && <span className="text-gray-300">-</span>}
                                             </td>
-                                            {/* Usa o total calculado dinamicamente, não o do DB */}
+                                            {/* Usa o total calculado dinamicamente */}
                                             <td className="border p-2 text-right font-bold">{rowTotal}</td>
                                             <td className="border p-2 text-right">R$ {rowValue.toFixed(2)}</td>
                                         </tr>
