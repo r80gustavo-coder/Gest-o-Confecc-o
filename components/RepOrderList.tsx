@@ -103,10 +103,9 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 <span class="uppercase text-xs">${item.color}</span>
                             </td>
                             ${ALL_SIZES.map(s => {
-                                // LÓGICA ATUALIZADA:
+                                // LÓGICA ATUALIZADA PDF:
                                 // Se existir 'picked' (separação feita), usa o valor separado.
                                 // Caso contrário, usa o valor original do pedido (sizes).
-                                // Isso garante que itens adicionados depois apareçam.
                                 const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
                                 return `<td class="text-center">${val || '-'}</td>`;
                             }).join('')}
@@ -314,19 +313,42 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                         <td className="border p-2 font-medium">{item.reference}</td>
                                         <td className="border p-2">{item.color}</td>
                                         <td className="border p-2 text-center">
-                                            {Object.entries(item.sizes).map(([s, value]) => {
-                                                const q = value as number;
-                                                const p = (item.picked?.[s] as number) || 0;
-                                                // Exibe: SEPARADO / PEDIDO se houver separação, senão só PEDIDO
-                                                const display = p > 0 ? `${p}/${q}` : `${q}`;
-                                                const style = p >= q && q > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100';
-                                                
+                                            {/* 
+                                                ATUALIZAÇÃO DE VISUALIZAÇÃO:
+                                                Agora itera sobre ALL_SIZES para garantir que itens que não estavam 
+                                                no pedido original (sizes={}) mas foram bipados (picked={}) apareçam.
+                                            */}
+                                            {ALL_SIZES.map(s => {
+                                                const q = (item.sizes && item.sizes[s]) || 0;
+                                                const p = (item.picked && item.picked[s]) || 0;
+
+                                                // Se não tem nem pedido nem separado, não exibe
+                                                if (q === 0 && p === 0) return null;
+
+                                                let displayStr = `${q}`;
+                                                let style = 'bg-gray-100 text-gray-600 border-gray-200';
+
+                                                if (p > 0) {
+                                                    if (q === 0) {
+                                                        // Item Extra (não estava no pedido original)
+                                                        displayStr = `${p}`;
+                                                        style = 'bg-blue-100 text-blue-800 border-blue-200';
+                                                    } else {
+                                                        // Item Separado vs Pedido
+                                                        displayStr = `${p}/${q}`;
+                                                        if (p >= q) style = 'bg-green-100 text-green-800 border-green-200';
+                                                        else style = 'bg-yellow-50 text-yellow-700 border-yellow-200';
+                                                    }
+                                                }
+
                                                 return (
-                                                    <span key={s} className={`${style} px-1 mx-1 rounded text-xs border border-gray-200`}>
-                                                        {s}: {display}
+                                                    <span key={s} className={`${style} px-1.5 py-0.5 mx-0.5 rounded text-xs border inline-block mb-1`}>
+                                                        <span className="font-bold mr-0.5">{s}:</span>{displayStr}
                                                     </span>
                                                 )
                                             })}
+                                            {/* Fallback visual caso item esteja completamente zerado */}
+                                            {(!item.sizes && !item.picked) && <span className="text-gray-300">-</span>}
                                         </td>
                                         <td className="border p-2 text-right font-bold">{item.totalQty}</td>
                                         <td className="border p-2 text-right">R$ {(item.totalItemValue || 0).toFixed(2)}</td>
