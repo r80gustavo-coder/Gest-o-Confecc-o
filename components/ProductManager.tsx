@@ -1,15 +1,15 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ProductDef, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts, addProduct, deleteProduct, updateProductInventory, generateUUID } from '../services/storageService';
-import { Trash, Plus, Loader2, Package, Edit2, X, Save, DollarSign, ArrowDownToLine, Check } from 'lucide-react';
+import { Trash, Plus, Loader2, Package, Edit2, X, Save, ArrowDownToLine, Check, Layers, Ruler } from 'lucide-react';
 
 const ProductManager: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
   const [newRef, setNewRef] = useState('');
   const [newColor, setNewColor] = useState('');
   const [newGrid, setNewGrid] = useState<SizeGridType>(SizeGridType.ADULT);
-  const [newBasePrice, setNewBasePrice] = useState(''); // Novo state para preço de custo
+  const [newBasePrice, setNewBasePrice] = useState(''); 
   
   // Novos estados para cadastro de estoque
   const [initialStock, setInitialStock] = useState<{[key: string]: string}>({});
@@ -19,13 +19,19 @@ const ProductManager: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<ProductDef | null>(null);
   const [editStockValues, setEditStockValues] = useState<{[key: string]: string}>({});
   const [editEnforceStock, setEditEnforceStock] = useState(false);
-  const [editBasePrice, setEditBasePrice] = useState(''); // State para edição de preço
+  const [editBasePrice, setEditBasePrice] = useState(''); 
 
-  // Estados para ENTRADA DE ESTOQUE
+  // --- Estados para ENTRADA DE ESTOQUE (Recebimento) ---
   const [showStockEntry, setShowStockEntry] = useState(false);
-  const [entryProduct, setEntryProduct] = useState<ProductDef | null>(null);
+  
+  // Seleção de Produto para Entrada
+  const [entryRef, setEntryRef] = useState('');
+  const [entryColor, setEntryColor] = useState('');
+  
+  // Modo de Entrada: 'grid' = Adiciona em todos os tamanhos, 'size' = Adiciona em um tamanho específico
+  const [entryMode, setEntryMode] = useState<'size' | 'grid'>('grid'); 
   const [entrySize, setEntrySize] = useState('');
-  const [entryQty, setEntryQty] = useState('');
+  const [entryQty, setEntryQty] = useState(''); // Quantidade a adicionar
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,6 +51,36 @@ const ProductManager: React.FC = () => {
   useEffect(() => {
     setInitialStock({});
   }, [newGrid]);
+
+  // Limpa filtros do modal ao fechar ou abrir
+  useEffect(() => {
+      if (!showStockEntry) {
+          setEntryRef('');
+          setEntryColor('');
+          setEntrySize('');
+          setEntryQty('');
+          setEntryMode('grid');
+      }
+  }, [showStockEntry]);
+
+  // Helpers para o Modal de Entrada (Derived State)
+  const uniqueRefs = useMemo(() => {
+      return Array.from(new Set(products.map(p => p.reference))).sort();
+  }, [products]);
+
+  const availableColorsForRef = useMemo(() => {
+      if (!entryRef) return [];
+      return products
+        .filter(p => p.reference === entryRef)
+        .map(p => p.color)
+        .sort();
+  }, [products, entryRef]);
+
+  const activeEntryProduct = useMemo(() => {
+      if (!entryRef || !entryColor) return null;
+      return products.find(p => p.reference === entryRef && p.color === entryColor) || null;
+  }, [products, entryRef, entryColor]);
+
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,8 +179,9 @@ const ProductManager: React.FC = () => {
 
   // --- Lógica de Entrada de Estoque (Recebimento) ---
   const handleSaveStockEntry = async () => {
-      if (!entryProduct || !entrySize || !entryQty) {
-          alert("Selecione produto, tamanho e quantidade.");
+      if (!activeEntryProduct) return;
+      if (!entryQty) {
+          alert("Informe a quantidade.");
           return;
       }
       
@@ -154,20 +191,47 @@ const ProductManager: React.FC = () => {
           return;
       }
 
+      if (entryMode === 'size' && !entrySize) {
+          alert("Selecione o tamanho para adicionar.");
+          return;
+      }
+
       setLoading(true);
       try {
-          const currentStock = entryProduct.stock || {};
-          const currentQty = currentStock[entrySize] || 0;
-          const newQty = currentQty + qtyToAdd;
+          const currentStock = { ...activeEntryProduct.stock };
+          
+          if (entryMode === 'grid') {
+              // Lógica de GRADE: Adiciona a quantidade EM CADA tamanho da grade
+              const sizes = SIZE_GRIDS[activeEntryProduct.gridType];
+              sizes.forEach(size => {
+                  const currentQty = currentStock[size] || 0;
+                  currentStock[size] = currentQty + qtyToAdd;
+              });
+          } else {
+              // Lógica de TAMANHO ÚNICO: Adiciona apenas no tamanho selecionado
+              const currentQty = currentStock[entrySize] || 0;
+              currentStock[entrySize] = currentQty + qtyToAdd;
+          }
 
-          const newStock = { ...currentStock, [entrySize]: newQty };
-
-          await updateProductInventory(entryProduct.id, newStock, entryProduct.enforceStock, entryProduct.basePrice);
+          // Atualiza no banco
+          await updateProductInventory(
+              activeEntryProduct.id, 
+              currentStock, 
+              activeEntryProduct.enforceStock, 
+              activeEntryProduct.basePrice
+          );
+          
           await fetchData();
           
-          // Reset parcial para facilitar múltiplas entradas
+          // Reset parcial para permitir adicionar mais do mesmo produto rapidamente
           setEntryQty('');
-          alert(`Estoque atualizado! ${entryProduct.reference} (${entrySize}) agora tem ${newQty} peças.`);
+          
+          if (entryMode === 'grid') {
+              alert(`Sucesso! Adicionado +${qtyToAdd} peças em TODOS os tamanhos da grade de ${activeEntryProduct.reference} - ${activeEntryProduct.color}.`);
+          } else {
+              alert(`Sucesso! Adicionado +${qtyToAdd} peças ao tamanho ${entrySize} de ${activeEntryProduct.reference} - ${activeEntryProduct.color}.`);
+          }
+
       } catch (e: any) {
           alert("Erro ao dar entrada no estoque: " + e.message);
       } finally {
@@ -182,15 +246,16 @@ const ProductManager: React.FC = () => {
             <h2 className="text-2xl font-bold text-gray-800">Catálogo de Produtos e Estoque</h2>
             {loading && <Loader2 className="animate-spin text-blue-600" />}
         </div>
+        {/* Botão Principal de Entrada */}
         <button 
             onClick={() => setShowStockEntry(true)}
             className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center shadow hover:bg-green-700 transition"
         >
-            <ArrowDownToLine className="w-5 h-5 mr-2" /> Registrar Entrada
+            <ArrowDownToLine className="w-5 h-5 mr-2" /> Incluir Peças (Chegada)
         </button>
       </div>
       
-      {/* Formulário de Cadastro */}
+      {/* Formulário de Cadastro de Novo Produto */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold mb-4 text-gray-700">Cadastrar Novo Produto</h3>
         {error && <div className="mb-4 text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
@@ -376,74 +441,137 @@ const ProductManager: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL DE ENTRADA DE ESTOQUE */}
+      {/* MODAL DE ENTRADA DE ESTOQUE (NOVO FLUXO) */}
       {showStockEntry && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-fade-in">
-              <div className="bg-white rounded-lg w-full max-w-md shadow-xl flex flex-col">
+              <div className="bg-white rounded-lg w-full max-w-lg shadow-xl flex flex-col">
                    <div className="p-4 border-b flex justify-between items-center bg-green-50 rounded-t-lg">
                         <h3 className="font-bold text-lg text-green-900 flex items-center">
-                            <ArrowDownToLine className="w-5 h-5 mr-2" /> Recebimento de Mercadoria
+                            <ArrowDownToLine className="w-5 h-5 mr-2" /> Incluir Peças (Chegada)
                         </h3>
                         <button onClick={() => setShowStockEntry(false)} className="text-gray-500 hover:text-gray-700">
                             <X className="w-6 h-6" />
                         </button>
                     </div>
                     
-                    <div className="p-6 space-y-4">
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">Selecione o Produto</label>
-                            <select 
-                                className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
-                                value={entryProduct ? entryProduct.id : ''}
-                                onChange={(e) => {
-                                    const p = products.find(prod => prod.id === e.target.value);
-                                    setEntryProduct(p || null);
-                                    setEntrySize('');
-                                }}
-                            >
-                                <option value="">Selecione...</option>
-                                {products.sort((a,b) => a.reference.localeCompare(b.reference)).map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.reference} - {p.color}
-                                    </option>
-                                ))}
-                            </select>
+                    <div className="p-6 space-y-5">
+                        
+                        {/* 1. SELEÇÃO DE PRODUTO (REF e COR separados) */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">1. Referência</label>
+                                <select 
+                                    className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
+                                    value={entryRef}
+                                    onChange={(e) => {
+                                        setEntryRef(e.target.value);
+                                        setEntryColor(''); // Reset color on ref change
+                                    }}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {uniqueRefs.map(ref => (
+                                        <option key={ref} value={ref}>{ref}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">2. Cor</label>
+                                <select 
+                                    className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
+                                    value={entryColor}
+                                    onChange={(e) => setEntryColor(e.target.value)}
+                                    disabled={!entryRef}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {availableColorsForRef.map(color => (
+                                        <option key={color} value={color}>{color}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
-                        {entryProduct && (
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Tamanho</label>
-                                    <select 
-                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
-                                        value={entrySize}
-                                        onChange={(e) => setEntrySize(e.target.value)}
-                                    >
-                                        <option value="">Selecione...</option>
-                                        {SIZE_GRIDS[entryProduct.gridType].map(s => (
-                                            <option key={s} value={s}>{s} (Atual: {entryProduct.stock[s] || 0})</option>
-                                        ))}
-                                    </select>
+                        {/* 2. MODO DE ENTRADA (GRADE ou TAMANHO) */}
+                        {activeEntryProduct && (
+                            <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                                <label className="block text-sm font-bold text-gray-700 mb-3">3. Como adicionar?</label>
+                                <div className="flex gap-4 mb-4">
+                                    <label className={`flex-1 flex items-center justify-center p-3 rounded cursor-pointer border transition-all ${entryMode === 'grid' ? 'bg-white border-green-500 shadow-sm ring-1 ring-green-500' : 'bg-gray-100 border-gray-200 hover:bg-gray-200'}`}>
+                                        <input 
+                                            type="radio" 
+                                            className="sr-only" 
+                                            name="entryMode" 
+                                            checked={entryMode === 'grid'} 
+                                            onChange={() => setEntryMode('grid')} 
+                                        />
+                                        <div className="text-center">
+                                            <Layers className={`w-6 h-6 mx-auto mb-1 ${entryMode === 'grid' ? 'text-green-600' : 'text-gray-500'}`} />
+                                            <span className={`text-xs font-bold ${entryMode === 'grid' ? 'text-green-800' : 'text-gray-600'}`}>
+                                                Por Grade Completa
+                                            </span>
+                                        </div>
+                                    </label>
+
+                                    <label className={`flex-1 flex items-center justify-center p-3 rounded cursor-pointer border transition-all ${entryMode === 'size' ? 'bg-white border-blue-500 shadow-sm ring-1 ring-blue-500' : 'bg-gray-100 border-gray-200 hover:bg-gray-200'}`}>
+                                        <input 
+                                            type="radio" 
+                                            className="sr-only" 
+                                            name="entryMode" 
+                                            checked={entryMode === 'size'} 
+                                            onChange={() => setEntryMode('size')} 
+                                        />
+                                        <div className="text-center">
+                                            <Ruler className={`w-6 h-6 mx-auto mb-1 ${entryMode === 'size' ? 'text-blue-600' : 'text-gray-500'}`} />
+                                            <span className={`text-xs font-bold ${entryMode === 'size' ? 'text-blue-800' : 'text-gray-600'}`}>
+                                                Por Tamanho Único
+                                            </span>
+                                        </div>
+                                    </label>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Qtd Entrada</label>
-                                    <input 
-                                        type="number"
-                                        min="1"
-                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
-                                        value={entryQty}
-                                        onChange={(e) => setEntryQty(e.target.value)}
-                                        placeholder="0"
-                                    />
+
+                                {/* INPUTS DE ACORDO COM O MODO */}
+                                <div className="flex items-end gap-3">
+                                    {entryMode === 'size' && (
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Tamanho</label>
+                                            <select 
+                                                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500"
+                                                value={entrySize}
+                                                onChange={(e) => setEntrySize(e.target.value)}
+                                            >
+                                                <option value="">...</option>
+                                                {SIZE_GRIDS[activeEntryProduct.gridType].map(s => (
+                                                    <option key={s} value={s}>{s}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">
+                                            {entryMode === 'grid' ? 'Qtd por Tamanho' : 'Quantidade'}
+                                        </label>
+                                        <input 
+                                            type="number"
+                                            min="1"
+                                            className="w-full border p-2 rounded focus:ring-2 focus:ring-green-500"
+                                            value={entryQty}
+                                            onChange={(e) => setEntryQty(e.target.value)}
+                                            placeholder="Ex: 10"
+                                            autoFocus
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        
-                        {entryProduct && entrySize && (
-                            <div className="bg-gray-50 p-3 rounded text-sm text-gray-600">
-                                <p>Estoque Atual: <strong>{entryProduct.stock[entrySize] || 0}</strong></p>
-                                <p>Entrada: <strong>+ {entryQty || 0}</strong></p>
-                                <p className="mt-1 pt-1 border-t text-green-700">Novo Estoque: <strong>{(entryProduct.stock[entrySize] || 0) + (parseInt(entryQty) || 0)}</strong></p>
+
+                                {/* RESUMO DA AÇÃO */}
+                                {entryQty && parseInt(entryQty) > 0 && (
+                                    <div className="mt-4 p-2 bg-green-100 rounded text-xs text-green-800 border border-green-200">
+                                        <strong>Resumo:</strong> 
+                                        {entryMode === 'grid' 
+                                            ? ` Adicionará +${entryQty} peças para CADA tamanho da grade (${SIZE_GRIDS[activeEntryProduct.gridType].join(', ')}). Total: +${parseInt(entryQty) * SIZE_GRIDS[activeEntryProduct.gridType].length} peças.`
+                                            : ` Adicionará +${entryQty} peças apenas no tamanho ${entrySize || '?'}.`
+                                        }
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -457,10 +585,10 @@ const ProductManager: React.FC = () => {
                         </button>
                         <button 
                             onClick={handleSaveStockEntry}
-                            disabled={loading || !entryProduct || !entrySize || !entryQty}
+                            disabled={loading || !activeEntryProduct || !entryQty}
                             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold flex items-center shadow-sm disabled:opacity-50"
                         >
-                            <Check className="w-4 h-4 mr-2" /> Confirmar Entrada
+                            <Check className="w-4 h-4 mr-2" /> Confirmar Inclusão
                         </button>
                     </div>
               </div>

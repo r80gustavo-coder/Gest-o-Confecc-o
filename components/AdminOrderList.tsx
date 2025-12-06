@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef, SIZE_GRIDS, User, Role } from '../types';
 import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers, getRepPrices, addOrder, generateUUID } from '../services/storageService';
@@ -1349,11 +1348,11 @@ const AdminOrderList: React.FC = () => {
                                     }
 
                                     // Soma Quantidade Pedida
-                                    const ordered = Object.values(item.sizes).reduce((a,b) => a + (b as number), 0);
+                                    const ordered = Object.values(item.sizes).reduce((a: number, b) => a + (Number(b) || 0), 0);
                                     currentOrderQty += ordered;
 
                                     // Soma Quantidade Separada (Picked)
-                                    const picked = item.picked ? Object.values(item.picked).reduce((a,b) => a + (b as number), 0) : 0;
+                                    const picked = item.picked ? Object.values(item.picked).reduce((a: number, b) => a + (Number(b) || 0), 0) : 0;
                                     currentPickedQty += picked;
                                     currentPickedValue += (picked * unitPrice);
                                 });
