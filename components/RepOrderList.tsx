@@ -102,7 +102,14 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 <strong>${item.reference}</strong><br/>
                                 <span class="uppercase text-xs">${item.color}</span>
                             </td>
-                            ${ALL_SIZES.map(s => `<td class="text-center">${item.sizes[s] || '-'}</td>`).join('')}
+                            ${ALL_SIZES.map(s => {
+                                // LÓGICA ATUALIZADA:
+                                // Se existir 'picked' (separação feita), usa o valor separado.
+                                // Caso contrário, usa o valor original do pedido (sizes).
+                                // Isso garante que itens adicionados depois apareçam.
+                                const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
+                                return `<td class="text-center">${val || '-'}</td>`;
+                            }).join('')}
                             <td class="text-right font-bold p-2">${item.totalQty}</td>
                             <td class="text-right p-2">${item.unitPrice.toFixed(2)}</td>
                             <td class="text-right font-bold p-2">${item.totalItemValue.toFixed(2)}</td>
