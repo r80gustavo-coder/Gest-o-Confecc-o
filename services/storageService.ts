@@ -127,8 +127,8 @@ export const updateStockOnOrderCreation = async (items: OrderItem[]): Promise<vo
     }
 };
 
-// Função para SALVAR A SEPARAÇÃO e baixar estoque de produtos "Livres".
-// AGORA: Recalcula totais do pedido com base na separação
+// Função para SALVAR A SEPARAÇÃO e baixar estoque
+// AGORA: Recalcula totais do pedido com base na separação E gerencia estoque de itens extras
 export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], newItems: OrderItem[]): Promise<Order> => {
     
     // 1. Busca dados atuais do pedido para pegar as configurações de desconto
@@ -147,27 +147,6 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
     const processedItems = newItems.map(item => {
         // Soma a quantidade separada (picked)
         const pickedQty = item.picked ? Object.values(item.picked).reduce((a, b) => a + b, 0) : 0;
-        
-        // Regra de Negócio: Se a quantidade separada for MAIOR que a pedida, 
-        // ou se o item foi adicionado manualmente (pedido = 0), atualizamos o totalQty para refletir a venda real.
-        // Caso contrário, mantemos o totalQty original (pedido original).
-        // Se você quiser que o valor SEMPRE reflita o que foi separado, use: const finalQty = pickedQty;
-        // Se quiser manter o histórico do pedido original se separou menos: const finalQty = Math.max(item.totalQty, pickedQty);
-        
-        // Opção: Vamos assumir que "Valor Atualizado" significa valor do que está saindo (Separado).
-        // Se o item foi adicionado na hora (totalQty 0), ele assume pickedQty.
-        // Se era um item pedido (10) e separou (10), tudo certo.
-        // Se era pedido (10) e separou (5), o valor do pedido deve cair? Geralmente sim, pois é o que vai ser faturado.
-        
-        // Vamos atualizar o totalQty para ser o maior valor entre (Original vs Separado) para garantir que não percamos a info do pedido original visualmente, 
-        // MAS para cálculo financeiro, usaremos o que foi efetivamente separado/validado se houver separação, 
-        // ou o totalQty se não houver separação ainda.
-        
-        // Lógica Simplificada para Gestão: O que vale é o que foi separado (picked).
-        // Se pickedQty > 0, usamos ele para o cálculo financeiro.
-        // Se pickedQty == 0, assumimos que nada foi separado ainda, então usamos totalQty (pedido original) para o valor.
-        
-        // Para itens adicionados manualmente (Ref extra), totalQty inicial é 0. Então pickedQty define o valor.
         
         let quantityForCalc = item.totalQty;
         
@@ -217,7 +196,7 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
     
     if (error) throw error;
 
-    // 5. Calcula diferença e atualiza estoque APENAS para produtos LIVRES (enforceStock = false)
+    // 5. Calcula diferença e atualiza estoque
     const currentProducts = await getProducts();
 
     const processedKeys = new Set<string>();
@@ -238,11 +217,15 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
         const newItem = newMap[key];
         const product = currentProducts.find(p => p.reference === ref && p.color === color);
 
-        if (product && !product.enforceStock) {
+        if (product) {
             let stockChanged = false;
             const newStock = { ...product.stock };
+            
             const oldPicked = oldItem?.picked || {};
             const newPicked = newItem?.picked || {};
+            // Pega a quantidade original pedida para saber se já houve reserva
+            const orderedSizes = newItem?.sizes || {};
+
             const allSizes = new Set([...Object.keys(oldPicked), ...Object.keys(newPicked)]);
 
             allSizes.forEach(size => {
@@ -251,9 +234,27 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
                 const delta = qNew - qOld; 
 
                 if (delta !== 0) {
-                    const currentStockQty = newStock[size] || 0;
-                    newStock[size] = currentStockQty - delta;
-                    stockChanged = true;
+                    let applyUpdate = false;
+
+                    if (!product.enforceStock) {
+                        // Se o estoque é LIVRE, sempre atualiza baseado no que separou
+                        applyUpdate = true;
+                    } else {
+                        // Se o estoque é TRAVADO:
+                        // Verificamos se esse tamanho específico foi "pedido" (sizes > 0).
+                        // Se sizes[size] == 0, significa que é um item EXTRA adicionado na separação.
+                        // Itens extras não tiveram baixa na criação, então precisam baixar agora.
+                        const reservedQty = orderedSizes[size] || 0;
+                        if (reservedQty === 0) {
+                            applyUpdate = true;
+                        }
+                    }
+
+                    if (applyUpdate) {
+                        const currentStockQty = newStock[size] || 0;
+                        newStock[size] = currentStockQty - delta;
+                        stockChanged = true;
+                    }
                 }
             });
 
