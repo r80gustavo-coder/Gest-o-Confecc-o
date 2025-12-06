@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef, SIZE_GRIDS, User, Role } from '../types';
-import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers, getRepPrices } from '../services/storageService';
+import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers, getRepPrices, addOrder, generateUUID } from '../services/storageService';
 import { supabase } from '../services/supabaseClient'; // Importação do Supabase para Realtime
-import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check, Truck, Filter, User as UserIcon } from 'lucide-react';
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check, Truck, Filter, User as UserIcon, Split, Scissors } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
@@ -28,6 +28,9 @@ const AdminOrderList: React.FC = () => {
   const [pickingOrder, setPickingOrder] = useState<Order | null>(null);
   const [pickingItems, setPickingItems] = useState<OrderItem[]>([]);
   const [savingPicking, setSavingPicking] = useState(false);
+  const [showRomaneioOptions, setShowRomaneioOptions] = useState(false); // Modal interno de opções de romaneio
+  const [inputRomaneio, setInputRomaneio] = useState('');
+
   // NOVO: Estado para armazenar os preços do representante do pedido atual
   const [currentRepPriceMap, setCurrentRepPriceMap] = useState<Record<string, number>>({});
   
@@ -193,6 +196,8 @@ const AdminOrderList: React.FC = () => {
       setEditingItemIdx(null); // Reseta edição
       setAddRef('');
       setAddColor('');
+      setShowRomaneioOptions(false);
+      setInputRomaneio('');
   };
 
   const handlePickingChange = (itemIdx: number, size: string, val: string) => {
@@ -272,26 +277,16 @@ const AdminOrderList: React.FC = () => {
       }
   };
 
-  const savePicking = async () => {
-      if (!pickingOrder) return;
-      if (editingItemIdx !== null) {
-          alert("Por favor, confirme ou cancele a edição do item (clique no ✔) antes de salvar o pedido.");
-          return;
-      }
-      setSavingPicking(true);
-
-      // --- VALIDAÇÃO DE ESTOQUE TRAVADO ---
-      
+  // --- LOGICA DE VALIDAÇÃO DE ESTOQUE COMPARTILHADA ---
+  const validateStockBeforeAction = (): boolean => {
       for (const item of pickingItems) {
           const product = products.find(p => p.reference === item.reference && p.color === item.color);
           
           if (product && product.enforceStock) {
-              // Busca o estado ORIGINAL do item (como estava salvo no banco antes desta edição)
-              const originalItemSnapshot = pickingOrder.items.find(
+              const originalItemSnapshot = pickingOrder?.items.find(
                   i => i.reference === item.reference && i.color === item.color
               );
 
-              // Consolida todos os tamanhos envolvidos (seja no picked ou no sizes)
               const allSizes = new Set([
                   ...Object.keys(item.picked || {}),
                   ...Object.keys(item.sizes || {})
@@ -299,13 +294,11 @@ const AdminOrderList: React.FC = () => {
 
               for (const size of allSizes) {
                   const qNewPicked = (item.picked?.[size] as number) || 0;
-                  const qNewOrdered = (item.sizes?.[size] as number) || 0; // Quantidade pedida atual (pode ter sido editada)
+                  const qNewOrdered = (item.sizes?.[size] as number) || 0; 
                   
-                  // Valores antigos/originais
                   const qOldOrdered = originalItemSnapshot?.sizes?.[size] || 0;
                   const qOldPicked = originalItemSnapshot?.picked?.[size] || 0;
 
-                  // Lógica de Consumo (Espelho do Backend atualizado):
                   const prevConsumption = qOldPicked > 0 ? qOldPicked : qOldOrdered;
                   const newConsumption = qNewPicked > 0 ? qNewPicked : qNewOrdered;
                   
@@ -315,25 +308,31 @@ const AdminOrderList: React.FC = () => {
                       const currentStock = (product.stock[size] as number) || 0;
                       if (stockNeeded > currentStock) {
                           alert(`BLOQUEADO: Estoque insuficiente para ${item.reference} - ${item.color} (Tam: ${size}).\n\nVocê precisa de mais ${stockNeeded} peça(s), mas só existem ${currentStock} disponíveis.`);
-                          setSavingPicking(false);
-                          return; // Para a execução
+                          return false;
                       }
                   }
               }
           }
       }
+      return true;
+  };
 
+  const savePickingSimple = async () => {
+      if (!pickingOrder) return;
+      if (editingItemIdx !== null) {
+          alert("Por favor, confirme ou cancele a edição do item (clique no ✔) antes de salvar.");
+          return;
+      }
+      if (!validateStockBeforeAction()) return;
+
+      setSavingPicking(true);
       try {
           const updatedOrder = await saveOrderPicking(pickingOrder.id, pickingOrder.items, pickingItems);
-          
-          // Atualiza lista local com o objeto retornado do serviço (que já tem os totais recalculados)
           const updatedOrders = orders.map(o => o.id === pickingOrder.id ? updatedOrder : o);
           setOrders(updatedOrders);
           
           setPickingOrder(null);
           setEditingItemIdx(null);
-          
-          // Atualiza os produtos em background
           getProducts().then(setProducts);
 
       } catch (e: any) {
@@ -342,6 +341,199 @@ const AdminOrderList: React.FC = () => {
           setSavingPicking(false);
       }
   };
+
+  // --- LÓGICA DE ENTREGA PARCIAL ---
+  const handlePartialDelivery = async () => {
+      if (!pickingOrder || !inputRomaneio) {
+          alert("Informe o número do Romaneio.");
+          return;
+      }
+
+      setSavingPicking(true);
+
+      try {
+          // 1. Calcular itens para o NOVO Pedido (Só o que foi separado)
+          // 2. Calcular itens restantes para o PEDIDO ATUAL (Original - Separado)
+
+          const deliveryItems: OrderItem[] = [];
+          const remainingItems: OrderItem[] = [];
+          let totalPickedCount = 0;
+
+          pickingItems.forEach(item => {
+               // Clone para garantir
+               const deliveryItem: OrderItem = { ...item, sizes: {}, picked: undefined, totalQty: 0, totalItemValue: 0 };
+               const remainingItem: OrderItem = { ...item, sizes: {}, picked: {}, totalQty: 0, totalItemValue: 0 };
+
+               let itemHasDelivery = false;
+               let itemHasRemaining = false;
+
+               // Une todos os tamanhos possíveis
+               const allSizes = new Set([...Object.keys(item.sizes), ...Object.keys(item.picked || {})]);
+
+               allSizes.forEach(size => {
+                   const ordered = (item.sizes[size] as number) || 0;
+                   const picked = (item.picked?.[size] as number) || 0;
+                   
+                   // Lógica para o novo pedido (Entrega)
+                   if (picked > 0) {
+                       deliveryItem.sizes[size] = picked;
+                       itemHasDelivery = true;
+                       totalPickedCount += picked;
+                   }
+
+                   // Lógica para o pedido remanescente (Saldo)
+                   const balance = Math.max(0, ordered - picked);
+                   if (balance > 0) {
+                       remainingItem.sizes[size] = balance;
+                       itemHasRemaining = true;
+                   }
+               });
+
+               // Recalcula totais
+               if (itemHasDelivery) {
+                    deliveryItem.totalQty = Object.values(deliveryItem.sizes).reduce((a, b) => a + (b as number), 0);
+                    deliveryItem.totalItemValue = deliveryItem.totalQty * deliveryItem.unitPrice;
+                    deliveryItems.push(deliveryItem);
+               }
+
+               if (itemHasRemaining) {
+                    remainingItem.totalQty = Object.values(remainingItem.sizes).reduce((a, b) => a + (b as number), 0);
+                    remainingItem.totalItemValue = remainingItem.totalQty * remainingItem.unitPrice;
+                    remainingItems.push(remainingItem);
+               }
+          });
+
+          if (totalPickedCount === 0) {
+              alert("Nenhum item foi bipado/separado para gerar entrega parcial.");
+              setSavingPicking(false);
+              return;
+          }
+
+          // 3. Criar o NOVO Pedido (Finalizado com Romaneio)
+          // Usamos addOrder. Importante: addOrder tenta baixar estoque. 
+          // Mas como estamos mexendo no pedido original também, precisamos garantir que o saldo final de estoque esteja correto.
+          // Estrategia:
+          // A. Criar pedido novo (addOrder baixa estoque dos itens bipados).
+          // B. Atualizar pedido antigo (Resetar picked para 0, Reduzir sizes). Chamar saveOrderPicking.
+          // saveOrderPicking vai ver que picked foi de X para 0. Isso DEVOLVERIA o estoque.
+          // Logo: addOrder (Tira X) + saveOrderPicking (Devolve X) = 0 alteração de estoque físico.
+          // ISSO ESTÁ CORRETO! O estoque já foi fisicamente separado. Apenas transferimos a propriedade do pedido A para B.
+
+          const deliverySubtotal = deliveryItems.reduce((acc, i) => acc + i.totalItemValue, 0);
+          
+          // Calcula desconto proporcional para o pedido parcial
+          let deliveryDiscount = 0;
+          if (pickingOrder.discountType === 'percentage') {
+              deliveryDiscount = deliverySubtotal * (pickingOrder.discountValue / 100);
+          } else if (pickingOrder.discountType === 'fixed') {
+               // Regra de três simples para desconto fixo proporcional
+               const originalSubtotal = pickingOrder.subtotalValue || 1; 
+               const ratio = deliverySubtotal / originalSubtotal;
+               deliveryDiscount = pickingOrder.discountValue * ratio;
+          }
+
+          const deliveryOrderPayload = {
+              id: generateUUID(),
+              repId: pickingOrder.repId,
+              repName: pickingOrder.repName,
+              clientId: pickingOrder.clientId,
+              clientName: pickingOrder.clientName,
+              clientCity: pickingOrder.clientCity,
+              clientState: pickingOrder.clientState,
+              createdAt: new Date().toISOString(), // Data da entrega parcial
+              deliveryDate: pickingOrder.deliveryDate,
+              paymentMethod: pickingOrder.paymentMethod,
+              romaneio: inputRomaneio, // AQUI VAI O ROMANEIO
+              status: 'printed' as const, // Já nasce finalizado
+              items: deliveryItems,
+              totalPieces: deliveryItems.reduce((a, i) => a + i.totalQty, 0),
+              subtotalValue: deliverySubtotal,
+              discountType: pickingOrder.discountType,
+              discountValue: pickingOrder.discountType === 'percentage' ? pickingOrder.discountValue : deliveryDiscount,
+              finalTotalValue: deliverySubtotal - deliveryDiscount
+          };
+
+          await addOrder(deliveryOrderPayload);
+
+          // 4. Atualizar o Pedido ORIGINAL (Saldo Aberto)
+          // Removemos o que foi entregue, zeramos o picked.
+          // O saveOrderPicking recalcula valores e atualiza estoque (devolvendo o que "saiu" do picked)
+          
+          await saveOrderPicking(pickingOrder.id, pickingOrder.items, remainingItems);
+
+          // Refresh e Fechar
+          await fetchData(true);
+          setPickingOrder(null);
+          setEditingItemIdx(null);
+          alert(`Sucesso! Pedido Parcial Gerado (Romaneio: ${inputRomaneio}). O saldo restante continua aberto no pedido #${pickingOrder.displayId}.`);
+
+      } catch (e: any) {
+          alert("Erro na entrega parcial: " + e.message);
+      } finally {
+          setSavingPicking(false);
+      }
+  };
+
+  // --- LÓGICA DE FINALIZAR E CANCELAR RESTANTE ---
+  const handleFinalizeWithCancel = async () => {
+       if (!pickingOrder || !inputRomaneio) {
+          alert("Informe o número do Romaneio.");
+          return;
+      }
+      
+      if (!confirm("Tem certeza? Isso irá FINALIZAR o pedido com apenas os itens bipados.\nOs itens NÃO bipados serão removidos do pedido (cancelados) e estornados ao estoque.")) {
+          return;
+      }
+
+      setSavingPicking(true);
+
+      try {
+          // Ajusta os itens: Sizes passa a ser igual a Picked.
+          // Se picked for 0 ou vazio, remove o tamanho/item.
+          
+          const finalItems: OrderItem[] = [];
+
+          pickingItems.forEach(item => {
+               const newItem: OrderItem = { ...item, sizes: {}, picked: undefined, totalQty: 0, totalItemValue: 0 };
+               let hasContent = false;
+
+               const allSizes = new Set([...Object.keys(item.sizes), ...Object.keys(item.picked || {})]);
+               
+               allSizes.forEach(size => {
+                   const picked = (item.picked?.[size] as number) || 0;
+                   if (picked > 0) {
+                       newItem.sizes[size] = picked; // O Pedido vira o que foi separado
+                       newItem.picked = { ...newItem.picked, [size]: picked }; // Mantém picked para registro visual ou consistência
+                       hasContent = true;
+                   }
+               });
+
+               if (hasContent) {
+                   newItem.totalQty = Object.values(newItem.sizes).reduce((a, b) => a + (b as number), 0);
+                   newItem.totalItemValue = newItem.totalQty * newItem.unitPrice;
+                   finalItems.push(newItem);
+               }
+          });
+
+          // 1. Atualiza itens e estoque (saveOrderPicking)
+          // Ao mudar sizes de 10 para 4 (pq picked foi 4), o estoque devolve 6.
+          await saveOrderPicking(pickingOrder.id, pickingOrder.items, finalItems);
+
+          // 2. Define Romaneio
+          await updateOrderRomaneio(pickingOrder.id, inputRomaneio);
+
+          await fetchData(true);
+          setPickingOrder(null);
+          setEditingItemIdx(null);
+          alert("Pedido finalizado e saldo restante cancelado com sucesso!");
+
+      } catch (e: any) {
+          alert("Erro ao finalizar: " + e.message);
+      } finally {
+          setSavingPicking(false);
+      }
+  };
+
 
   // Unique refs for dropdown in Modal
   const uniqueRefs = Array.from(new Set(products.map(p => p.reference))).sort();
@@ -1061,22 +1253,102 @@ const AdminOrderList: React.FC = () => {
                         </table>
                     </div>
 
-                    <div className="p-4 border-t bg-white rounded-b-lg flex justify-end gap-3">
-                         <button 
-                             onClick={() => setPickingOrder(null)}
-                             className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
-                         >
-                             Cancelar
-                         </button>
-                         <button 
-                             onClick={savePicking}
-                             disabled={savingPicking}
-                             className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center shadow-sm disabled:opacity-50"
-                         >
-                             {savingPicking ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                             Salvar e Atualizar Estoque
-                         </button>
+                    {/* RODAPÉ DO MODAL COM NOVAS OPÇÕES */}
+                    <div className="p-4 border-t bg-white rounded-b-lg flex flex-col md:flex-row justify-between items-center gap-3">
+                         <div className="text-xs text-gray-500 w-full md:w-auto text-center md:text-left">
+                            * Ao salvar, o estoque dos itens novos será baixado e o dos antigos recalculado.
+                         </div>
+
+                         <div className="flex gap-3 w-full md:w-auto justify-end">
+                            <button 
+                                onClick={() => setPickingOrder(null)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                            >
+                                Fechar
+                            </button>
+
+                            {/* Botão Salvar Simples (Apenas Estoque) */}
+                            <button 
+                                onClick={savePickingSimple}
+                                disabled={savingPicking}
+                                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center shadow-sm disabled:opacity-50 font-bold"
+                            >
+                                {savingPicking ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                                Salvar Progresso
+                            </button>
+
+                            {/* Botão Gerar Romaneio (Abre Opções) */}
+                            <button 
+                                onClick={() => setShowRomaneioOptions(true)}
+                                disabled={savingPicking}
+                                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center shadow-sm disabled:opacity-50 font-bold"
+                            >
+                                <Truck className="w-4 h-4 mr-2" />
+                                Gerar Romaneio...
+                            </button>
+                         </div>
                     </div>
+
+                    {/* MODAL INTERNO DE OPÇÕES DE ROMANEIO (OVERLAY) */}
+                    {showRomaneioOptions && (
+                        <div className="absolute inset-0 bg-white bg-opacity-95 z-10 flex items-center justify-center p-6 rounded-lg animate-fade-in backdrop-blur-sm">
+                            <div className="bg-white border-2 border-green-500 rounded-lg shadow-2xl p-6 max-w-lg w-full">
+                                <h3 className="text-xl font-bold text-green-800 mb-2 flex items-center">
+                                    <Truck className="w-6 h-6 mr-2" /> Gerar Romaneio & Finalizar
+                                </h3>
+                                <p className="text-sm text-gray-600 mb-6">
+                                    Escolha como deseja processar a entrega deste pedido.
+                                </p>
+
+                                <div className="mb-6">
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Número do Romaneio</label>
+                                    <input 
+                                        autoFocus
+                                        type="text" 
+                                        className="w-full border-2 border-gray-300 rounded p-3 text-lg font-bold uppercase focus:ring-2 focus:ring-green-500 outline-none"
+                                        placeholder="Digite o nº..."
+                                        value={inputRomaneio}
+                                        onChange={e => setInputRomaneio(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-3">
+                                    <button 
+                                        onClick={handlePartialDelivery}
+                                        disabled={!inputRomaneio || savingPicking}
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg flex items-center justify-between group transition disabled:opacity-50"
+                                    >
+                                        <div className="text-left">
+                                            <span className="block font-bold text-lg">Entrega Parcial</span>
+                                            <span className="text-xs opacity-90">Gera um novo pedido com os itens bipados. Mantém este aberto com o restante.</span>
+                                        </div>
+                                        <Split className="w-6 h-6 text-white opacity-80 group-hover:opacity-100" />
+                                    </button>
+
+                                    <button 
+                                        onClick={handleFinalizeWithCancel}
+                                        disabled={!inputRomaneio || savingPicking}
+                                        className="w-full bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg flex items-center justify-between group transition disabled:opacity-50"
+                                    >
+                                        <div className="text-left">
+                                            <span className="block font-bold text-lg">Finalizar & Cancelar Restante</span>
+                                            <span className="text-xs opacity-90">Fecha o pedido com o que foi bipado. Remove/Cancela os itens não bipados.</span>
+                                        </div>
+                                        <Scissors className="w-6 h-6 text-white opacity-80 group-hover:opacity-100" />
+                                    </button>
+                                </div>
+
+                                <div className="mt-4 pt-4 border-t text-center">
+                                    <button 
+                                        onClick={() => setShowRomaneioOptions(false)}
+                                        className="text-gray-500 hover:text-gray-800 underline"
+                                    >
+                                        Voltar para separação
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
               </div>
           </div>
       )}
