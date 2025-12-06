@@ -516,6 +516,12 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
   return orderWithSeq as Order;
 };
 
+// NOVO: Atualiza apenas o Romaneio
+export const updateOrderRomaneio = async (id: string, romaneio: string): Promise<void> => {
+  const { error } = await supabase.from('orders').update({ romaneio }).eq('id', id);
+  if (error) throw error;
+};
+
 export const updateOrderStatus = async (id: string, status: 'open' | 'printed'): Promise<void> => {
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
   if (error) console.error(error);

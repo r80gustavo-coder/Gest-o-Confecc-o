@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef, SIZE_GRIDS } from '../types';
-import { getOrders, updateOrderStatus, saveOrderPicking, getProducts } from '../services/storageService';
+import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio } from '../services/storageService';
 import { supabase } from '../services/supabaseClient'; // Importação do Supabase para Realtime
-import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check } from 'lucide-react';
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check, Truck } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
@@ -110,6 +110,24 @@ const AdminOrderList: React.FC = () => {
     } else {
         setSelectedOrderIds(new Set(filteredOrders.map(o => o.id))); // Select all currently visible
     }
+  };
+
+  // --- ROMANEIO LOGIC ---
+  const handleEditRomaneio = async (order: Order) => {
+      const newRomaneio = prompt("Informe o número do Romaneio:", order.romaneio || "");
+      if (newRomaneio !== null) {
+          try {
+              // Atualiza UI otimista
+              const updatedOrders = orders.map(o => o.id === order.id ? { ...o, romaneio: newRomaneio } : o);
+              setOrders(updatedOrders);
+              
+              // Salva no banco
+              await updateOrderRomaneio(order.id, newRomaneio);
+          } catch (e) {
+              alert("Erro ao salvar Romaneio. Tente novamente.");
+              fetchData(true); // Reverte mudanças se falhar
+          }
+      }
   };
 
   // --- SEPARATION LOGIC ---
@@ -525,7 +543,10 @@ const AdminOrderList: React.FC = () => {
                       className="w-4 h-4 cursor-pointer"
                     />
                   </td>
-                  <td className="p-4 font-bold text-gray-800">#{order.displayId}</td>
+                  <td className="p-4 font-bold text-gray-800">
+                      #{order.displayId}
+                      {order.romaneio && <div className="text-[10px] text-gray-500 font-normal mt-1">Romaneio: {order.romaneio}</div>}
+                  </td>
                   <td className="p-4 text-sm text-gray-600">
                     {new Date(order.createdAt).toLocaleDateString('pt-BR')}
                     <div className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
@@ -549,6 +570,14 @@ const AdminOrderList: React.FC = () => {
                     )}
                   </td>
                   <td className="p-4 text-right flex items-center justify-end gap-2">
+                    <button 
+                        onClick={() => handleEditRomaneio(order)}
+                        className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition p-2 rounded"
+                        title="Editar Número do Romaneio"
+                    >
+                        <Truck className="w-5 h-5" />
+                    </button>
+
                     <button
                         onClick={() => openPickingModal(order)}
                         className="text-orange-500 hover:text-orange-700 hover:bg-orange-50 p-2 rounded transition"
