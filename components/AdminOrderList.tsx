@@ -178,23 +178,42 @@ const AdminOrderList: React.FC = () => {
       setSavingPicking(true);
 
       // --- VALIDAÇÃO DE ESTOQUE TRAVADO ---
+      // A lógica aqui deve espelhar a lógica do backend (storageService) para calcular o DELTA correto.
+      // Se apenas compararmos o valor total novo com o estoque atual, vai falhar se o item já estiver parcialmente separado.
+      
       for (const item of pickingItems) {
           const product = products.find(p => p.reference === item.reference && p.color === item.color);
           
-          // Se o produto não existe mais ou tem estoque travado
           if (product && product.enforceStock) {
-              for (const [size, qty] of Object.entries(item.picked || {})) {
-                  // Quanto foi pedido originalmente (ou 0 se for item novo)
-                  const originalQty = item.sizes[size] || 0;
-                  const pickingQty = (qty as number) || 0;
-                  
-                  // Se estamos tentando separar MAIS do que foi pedido (incluindo item novo onde pedido=0)
-                  const increase = pickingQty - originalQty;
+              // Busca o estado ORIGINAL do item (como estava salvo no banco antes desta edição)
+              // Usamos pickingOrder.items porque ele é o snapshot de quando abrimos o modal
+              const originalItemSnapshot = pickingOrder.items.find(
+                  i => i.reference === item.reference && i.color === item.color
+              );
 
-                  if (increase > 0) {
+              for (const [size, qty] of Object.entries(item.picked || {})) {
+                  const qNewPicked = (qty as number) || 0;
+                  
+                  // Valores antigos/originais
+                  const qOrdered = originalItemSnapshot?.sizes?.[size] || 0;
+                  const qOldPicked = originalItemSnapshot?.picked?.[size] || 0;
+
+                  // Lógica de Consumo (Espelho do Backend):
+                  // Se já tinha separação salva (qOldPicked > 0), o consumo atual registrado no estoque é qOldPicked.
+                  // Se não tinha (primeira vez), o consumo registrado é qOrdered (reserva do pedido).
+                  const prevConsumption = qOldPicked > 0 ? qOldPicked : qOrdered;
+                  
+                  // O novo consumo será o que estamos salvando agora.
+                  // Se zerarmos a separação, volta a consumir o qOrdered (reserva volta para o pedido).
+                  const newConsumption = qNewPicked > 0 ? qNewPicked : qOrdered;
+                  
+                  // A diferença é o que precisamos tirar a mais do estoque físico
+                  const stockNeeded = newConsumption - prevConsumption;
+
+                  if (stockNeeded > 0) {
                       const currentStock = product.stock[size] || 0;
-                      if (increase > currentStock) {
-                          alert(`BLOQUEADO: Estoque insuficiente para ${item.reference} - ${item.color} (Tam: ${size}).\n\nVocê tentou adicionar ${increase} peças extras, mas só existem ${currentStock} disponíveis no estoque.`);
+                      if (stockNeeded > currentStock) {
+                          alert(`BLOQUEADO: Estoque insuficiente para ${item.reference} - ${item.color} (Tam: ${size}).\n\nVocê precisa de mais ${stockNeeded} peça(s), mas só existem ${currentStock} disponíveis.`);
                           setSavingPicking(false);
                           return; // Para a execução
                       }
@@ -211,6 +230,10 @@ const AdminOrderList: React.FC = () => {
           setOrders(updatedOrders);
           
           setPickingOrder(null);
+          
+          // Atualiza os produtos em background para refletir o novo estoque na tela sem recarregar tudo
+          getProducts().then(setProducts);
+
       } catch (e: any) {
           alert("Erro ao salvar separação: " + e.message);
       } finally {
