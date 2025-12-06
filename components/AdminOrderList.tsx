@@ -176,6 +176,33 @@ const AdminOrderList: React.FC = () => {
   const savePicking = async () => {
       if (!pickingOrder) return;
       setSavingPicking(true);
+
+      // --- VALIDAÇÃO DE ESTOQUE TRAVADO ---
+      for (const item of pickingItems) {
+          const product = products.find(p => p.reference === item.reference && p.color === item.color);
+          
+          // Se o produto não existe mais ou tem estoque travado
+          if (product && product.enforceStock) {
+              for (const [size, qty] of Object.entries(item.picked || {})) {
+                  // Quanto foi pedido originalmente (ou 0 se for item novo)
+                  const originalQty = item.sizes[size] || 0;
+                  const pickingQty = (qty as number) || 0;
+                  
+                  // Se estamos tentando separar MAIS do que foi pedido (incluindo item novo onde pedido=0)
+                  const increase = pickingQty - originalQty;
+
+                  if (increase > 0) {
+                      const currentStock = product.stock[size] || 0;
+                      if (increase > currentStock) {
+                          alert(`BLOQUEADO: Estoque insuficiente para ${item.reference} - ${item.color} (Tam: ${size}).\n\nVocê tentou adicionar ${increase} peças extras, mas só existem ${currentStock} disponíveis no estoque.`);
+                          setSavingPicking(false);
+                          return; // Para a execução
+                      }
+                  }
+              }
+          }
+      }
+
       try {
           const updatedOrder = await saveOrderPicking(pickingOrder.id, pickingOrder.items, pickingItems);
           
@@ -531,11 +558,19 @@ const AdminOrderList: React.FC = () => {
                                     <tr key={idx}>
                                         <td className="border border-black p-1 font-bold">{item.reference}</td>
                                         <td className="border border-black p-1 uppercase">{item.color}</td>
-                                        {ALL_SIZES.map(s => (
-                                            <td key={s} className="border border-black p-1 text-center">
-                                                {item.sizes[s] ? <span className="font-bold">{item.sizes[s]}</span> : <span className="text-gray-300">-</span>}
-                                            </td>
-                                        ))}
+                                        {ALL_SIZES.map(s => {
+                                            // Lógica para mostrar quantidade na grade:
+                                            // Se existe quantidade separada (picked), mostra ela. 
+                                            // Caso contrário, mostra a quantidade original do pedido.
+                                            // Isso garante que itens adicionados na separação apareçam no PDF.
+                                            const displayQty = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
+                                            
+                                            return (
+                                                <td key={s} className="border border-black p-1 text-center">
+                                                    {displayQty ? <span className="font-bold">{displayQty}</span> : <span className="text-gray-300">-</span>}
+                                                </td>
+                                            );
+                                        })}
                                         <td className="border border-black p-1 text-right font-bold">{item.totalQty}</td>
                                         <td className="border border-black p-1 text-right">{(item.totalItemValue || 0).toFixed(2)}</td>
                                     </tr>
