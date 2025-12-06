@@ -2,13 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef } from '../types';
 import { getOrders, updateOrderStatus, saveOrderPicking, getProducts } from '../services/storageService';
-import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { supabase } from '../services/supabaseClient'; // Importação do Supabase para Realtime
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const AdminOrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [products, setProducts] = useState<ProductDef[]>([]); // Carregar produtos para saber quem é Travado/Livre
+  const [products, setProducts] = useState<ProductDef[]>([]); 
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   
@@ -24,8 +25,12 @@ const AdminOrderList: React.FC = () => {
   const [pickingItems, setPickingItems] = useState<OrderItem[]>([]);
   const [savingPicking, setSavingPicking] = useState(false);
 
-  const fetchData = async () => {
-    setLoading(true);
+  // NOVO: Estado para notificação de novo pedido
+  const [newOrderNotification, setNewOrderNotification] = useState(false);
+
+  const fetchData = async (isBackgroundUpdate = false) => {
+    if (!isBackgroundUpdate) setLoading(true);
+    
     // Busca pedidos e produtos em paralelo
     const [ordersData, productsData] = await Promise.all([
         getOrders(),
@@ -34,11 +39,48 @@ const AdminOrderList: React.FC = () => {
     
     setOrders(ordersData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     setProducts(productsData);
-    setLoading(false);
+    
+    if (!isBackgroundUpdate) setLoading(false);
   };
 
+  // Efeito Inicial + Realtime Subscription
   useEffect(() => {
     fetchData();
+
+    // Configura o canal de Realtime do Supabase
+    const channel = supabase
+      .channel('admin-orders-channel')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        (payload) => {
+          console.log('Novo pedido recebido em tempo real!', payload);
+          
+          // 1. Toca um som de notificação (beep suave)
+          try {
+             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+             audio.volume = 0.5;
+             audio.play().catch(e => console.warn("Autoplay bloqueado pelo navegador", e));
+          } catch (e) {
+             // Ignora erro de áudio
+          }
+
+          // 2. Exibe notificação visual
+          setNewOrderNotification(true);
+          
+          // 3. Atualiza a lista automaticamente
+          fetchData(true);
+
+          // Remove a notificação visual após 8 segundos
+          setTimeout(() => setNewOrderNotification(false), 8000);
+        }
+      )
+      .subscribe();
+
+    // Cleanup ao sair da tela
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const toggleSelect = (id: string) => {
@@ -245,9 +287,27 @@ const AdminOrderList: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-4 md:space-y-6 relative">
+      {/* NOTIFICAÇÃO FLUTUANTE DE NOVO PEDIDO */}
+      {newOrderNotification && (
+          <div className="fixed top-20 right-4 z-50 bg-green-600 text-white p-4 rounded-lg shadow-2xl flex items-center animate-bounce cursor-pointer" onClick={() => setNewOrderNotification(false)}>
+              <Bell className="w-6 h-6 mr-3 text-white fill-current animate-pulse" />
+              <div>
+                  <h4 className="font-bold">Novo Pedido Recebido!</h4>
+                  <p className="text-sm text-green-100">A lista foi atualizada automaticamente.</p>
+              </div>
+              <button className="ml-4" onClick={(e) => { e.stopPropagation(); setNewOrderNotification(false); }}>
+                  <X className="w-4 h-4" />
+              </button>
+          </div>
+      )}
+
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-4 rounded-lg shadow-sm">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
+        <div className="flex items-center gap-2">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
+            {loading && <Loader2 className="animate-spin w-5 h-5 text-blue-600" />}
+        </div>
+        
         <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-start md:items-center w-full xl:w-auto">
            <div className="flex gap-2 w-full md:w-auto">
              <div className="flex-1">
@@ -270,6 +330,14 @@ const AdminOrderList: React.FC = () => {
              </div>
            </div>
            
+           <button 
+             onClick={() => fetchData()}
+             className="bg-gray-100 text-gray-700 p-2 rounded hover:bg-gray-200 shadow-sm mt-2 md:mt-0"
+             title="Atualizar Lista Manualmente"
+           >
+             <RefreshCw className="w-5 h-5" />
+           </button>
+
            {selectedOrderIds.size > 0 && (
              <button 
                onClick={() => setShowAggregation(true)}
@@ -285,7 +353,7 @@ const AdminOrderList: React.FC = () => {
       {/* Orders Table - Scrollable on Mobile */}
       <div className="bg-white rounded-lg shadow no-print overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
-          {loading ? (
+          {loading && orders.length === 0 ? (
               <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
           ) : (
           <table className="w-full text-left border-collapse min-w-[800px]">
@@ -325,6 +393,7 @@ const AdminOrderList: React.FC = () => {
                   <td className="p-4 font-bold text-gray-800">#{order.displayId}</td>
                   <td className="p-4 text-sm text-gray-600">
                     {new Date(order.createdAt).toLocaleDateString('pt-BR')}
+                    <div className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
                   </td>
                   <td className="p-4 text-sm">
                     <div className="font-medium text-gray-900">{order.clientName}</div>
