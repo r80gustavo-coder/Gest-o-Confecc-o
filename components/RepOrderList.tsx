@@ -35,6 +35,43 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
   const handlePrint = (order: Order) => {
     const win = window.open('', '', 'height=800,width=900');
     if (!win) return;
+    
+    // VARIÁVEIS PARA RECALCULO DE TOTAL NO PRINT
+    let calculatedTotalPieces = 0;
+    let calculatedSubtotal = 0;
+
+    const itemsHtml = order.items.map(item => {
+        // CÁLCULO DINÂMICO DO TOTAL DA LINHA
+        let rowTotal = 0;
+        const cellsHtml = ALL_SIZES.map(s => {
+            const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
+            const numVal = typeof val === 'number' ? val : 0;
+            rowTotal += numVal;
+            return `<td class="text-center">${numVal > 0 ? numVal : '-'}</td>`;
+        }).join('');
+
+        calculatedTotalPieces += rowTotal;
+        const rowValue = rowTotal * item.unitPrice;
+        calculatedSubtotal += rowValue;
+
+        return `
+        <tr>
+            <td class="p-2">
+                <strong>${item.reference}</strong><br/>
+                <span class="uppercase text-xs">${item.color}</span>
+            </td>
+            ${cellsHtml}
+            <td class="text-right font-bold p-2">${rowTotal}</td>
+            <td class="text-right p-2">${item.unitPrice.toFixed(2)}</td>
+            <td class="text-right font-bold p-2">${rowValue.toFixed(2)}</td>
+        </tr>
+    `}).join('');
+
+    const discountAmount = order.discountType === 'percentage' 
+        ? (calculatedSubtotal * order.discountValue)/100 
+        : order.discountValue;
+    
+    const finalTotal = calculatedSubtotal - discountAmount;
 
     const html = `
       <html>
@@ -96,34 +133,14 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${order.items.map(item => {
-                        // CÁLCULO DINÂMICO DO TOTAL DA LINHA
-                        let rowTotal = 0;
-                        const cellsHtml = ALL_SIZES.map(s => {
-                            const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-                            if(val) rowTotal += (val as number);
-                            return `<td class="text-center">${val || '-'}</td>`;
-                        }).join('');
-
-                        return `
-                        <tr>
-                            <td class="p-2">
-                                <strong>${item.reference}</strong><br/>
-                                <span class="uppercase text-xs">${item.color}</span>
-                            </td>
-                            ${cellsHtml}
-                            <td class="text-right font-bold p-2">${rowTotal}</td>
-                            <td class="text-right p-2">${item.unitPrice.toFixed(2)}</td>
-                            <td class="text-right font-bold p-2">${item.totalItemValue.toFixed(2)}</td>
-                        </tr>
-                    `}).join('')}
+                    ${itemsHtml}
                 </tbody>
                 <tfoot>
                     <tr class="bg-gray-100">
                         <td colspan="${ALL_SIZES.length + 1}" class="text-right font-bold uppercase p-2">Total Itens</td>
-                        <td class="text-right font-bold p-2">${order.totalPieces}</td>
+                        <td class="text-right font-bold p-2">${calculatedTotalPieces}</td>
                         <td class="text-right font-bold p-2">-</td>
-                        <td class="text-right font-bold p-2">${order.subtotalValue.toFixed(2)}</td>
+                        <td class="text-right font-bold p-2">${calculatedSubtotal.toFixed(2)}</td>
                     </tr>
                     ${order.discountValue > 0 ? `
                     <tr>
@@ -131,14 +148,12 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                             Desconto (${order.discountType === 'percentage' ? '%' : 'R$'})
                         </td>
                         <td class="text-right text-red-600 font-bold p-2">
-                            - ${order.discountType === 'percentage' 
-                                ? ((order.subtotalValue * order.discountValue)/100).toFixed(2) 
-                                : order.discountValue.toFixed(2)}
+                            - ${discountAmount.toFixed(2)}
                         </td>
                     </tr>` : ''}
                     <tr class="text-lg border-t-2 border-black">
                         <td colspan="${ALL_SIZES.length + 3}" class="text-right uppercase font-bold p-2">Total Final</td>
-                        <td class="text-right font-bold p-2">R$ ${(order.finalTotalValue || 0).toFixed(2)}</td>
+                        <td class="text-right font-bold p-2">R$ ${finalTotal.toFixed(2)}</td>
                     </tr>
                 </tfoot>
             </table>

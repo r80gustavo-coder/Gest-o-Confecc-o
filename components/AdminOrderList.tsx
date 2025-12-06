@@ -178,15 +178,12 @@ const AdminOrderList: React.FC = () => {
       setSavingPicking(true);
 
       // --- VALIDAÇÃO DE ESTOQUE TRAVADO ---
-      // A lógica aqui deve espelhar a lógica do backend (storageService) para calcular o DELTA correto.
-      // Se apenas compararmos o valor total novo com o estoque atual, vai falhar se o item já estiver parcialmente separado.
       
       for (const item of pickingItems) {
           const product = products.find(p => p.reference === item.reference && p.color === item.color);
           
           if (product && product.enforceStock) {
               // Busca o estado ORIGINAL do item (como estava salvo no banco antes desta edição)
-              // Usamos pickingOrder.items porque ele é o snapshot de quando abrimos o modal
               const originalItemSnapshot = pickingOrder.items.find(
                   i => i.reference === item.reference && i.color === item.color
               );
@@ -198,16 +195,9 @@ const AdminOrderList: React.FC = () => {
                   const qOrdered = originalItemSnapshot?.sizes?.[size] || 0;
                   const qOldPicked = originalItemSnapshot?.picked?.[size] || 0;
 
-                  // Lógica de Consumo (Espelho do Backend):
-                  // Se já tinha separação salva (qOldPicked > 0), o consumo atual registrado no estoque é qOldPicked.
-                  // Se não tinha (primeira vez), o consumo registrado é qOrdered (reserva do pedido).
                   const prevConsumption = qOldPicked > 0 ? qOldPicked : qOrdered;
-                  
-                  // O novo consumo será o que estamos salvando agora.
-                  // Se zerarmos a separação, volta a consumir o qOrdered (reserva volta para o pedido).
                   const newConsumption = qNewPicked > 0 ? qNewPicked : qOrdered;
                   
-                  // A diferença é o que precisamos tirar a mais do estoque físico
                   const stockNeeded = newConsumption - prevConsumption;
 
                   if (stockNeeded > 0) {
@@ -231,7 +221,7 @@ const AdminOrderList: React.FC = () => {
           
           setPickingOrder(null);
           
-          // Atualiza os produtos em background para refletir o novo estoque na tela sem recarregar tudo
+          // Atualiza os produtos em background
           getProducts().then(setProducts);
 
       } catch (e: any) {
@@ -400,6 +390,7 @@ const AdminOrderList: React.FC = () => {
           </div>
       )}
 
+      {/* Header e Filtros (Omitidos para brevidade, mantêm-se iguais) */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-4 rounded-lg shadow-sm">
         <div className="flex items-center gap-2">
             <h2 className="text-xl md:text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
@@ -448,7 +439,7 @@ const AdminOrderList: React.FC = () => {
         </div>
       </div>
 
-      {/* Orders Table - Scrollable on Mobile */}
+      {/* Orders Table */}
       <div className="bg-white rounded-lg shadow no-print overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
           {loading && orders.length === 0 ? (
@@ -478,7 +469,15 @@ const AdminOrderList: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {filteredOrders.length === 0 ? (
                   <tr><td colSpan={9} className="p-8 text-center text-gray-400">Nenhum pedido encontrado neste período.</td></tr>
-              ) : filteredOrders.map(order => (
+              ) : filteredOrders.map(order => {
+                
+                // --- CÁLCULO DE TOTAIS REAIS PARA IMPRESSÃO (NOVO) ---
+                // Isso garante que o template oculto (usado para impressão) tenha os valores
+                // matematicamente corretos baseados na grade exibida, independentemente do que está no DB.
+                let calculatedTotalPieces = 0;
+                let calculatedSubtotal = 0;
+
+                return (
                 <tr key={order.id} className={`hover:bg-blue-50 transition ${selectedOrderIds.has(order.id) ? 'bg-blue-50' : ''}`}>
                   <td className="p-4">
                     <input 
@@ -530,7 +529,6 @@ const AdminOrderList: React.FC = () => {
                     
                     {/* Hidden Print Template */}
                     <div id={`print-order-${order.id}`} className="hidden">
-                      {/* ... (Print template content same as before) ... */}
                       <div className="border-2 border-black p-8 font-sans max-w-3xl mx-auto">
                         <div className="flex justify-between border-b-2 border-black pb-4 mb-6">
                             <div>
@@ -578,16 +576,21 @@ const AdminOrderList: React.FC = () => {
                             </thead>
                             <tbody>
                                 {order.items.map((item, idx) => {
-                                    // CÁLCULO DINÂMICO DO TOTAL DA LINHA PARA O PDF
-                                    // Soma as quantidades EXIBIDAS na grade (prioriza 'picked' se existir)
-                                    // Isso garante que a coluna Qtd bata com a soma dos tamanhos, 
-                                    // mesmo se for um item novo incluído na separação.
+                                    // CÁLCULO DINÂMICO PARA O PDF
+                                    // Recalcula o total da linha baseado apenas no que será impresso
                                     let displayRowTotal = 0;
                                     const cells = ALL_SIZES.map(s => {
+                                        // Prioridade: Separado > Pedido
                                         const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-                                        if (val) displayRowTotal += (val as number);
-                                        return val;
+                                        const numVal = typeof val === 'number' ? val : 0;
+                                        displayRowTotal += numVal;
+                                        return numVal;
                                     });
+
+                                    // Acumula totais globais do pedido baseados na visualização
+                                    calculatedTotalPieces += displayRowTotal;
+                                    const rowValue = displayRowTotal * item.unitPrice;
+                                    calculatedSubtotal += rowValue;
 
                                     return (
                                         <tr key={idx}>
@@ -595,11 +598,12 @@ const AdminOrderList: React.FC = () => {
                                             <td className="border border-black p-1 uppercase">{item.color}</td>
                                             {cells.map((val, i) => (
                                                 <td key={i} className="border border-black p-1 text-center">
-                                                    {val ? <span className="font-bold">{val}</span> : <span className="text-gray-300">-</span>}
+                                                    {val > 0 ? <span className="font-bold">{val}</span> : <span className="text-gray-300">-</span>}
                                                 </td>
                                             ))}
+                                            {/* Usa o total recalculado, não o do banco */}
                                             <td className="border border-black p-1 text-right font-bold">{displayRowTotal}</td>
-                                            <td className="border border-black p-1 text-right">{(item.totalItemValue || 0).toFixed(2)}</td>
+                                            <td className="border border-black p-1 text-right">{rowValue.toFixed(2)}</td>
                                         </tr>
                                     );
                                 })}
@@ -608,7 +612,8 @@ const AdminOrderList: React.FC = () => {
                                 <tr className="bg-gray-100">
                                     <td colSpan={2} className="border border-black p-2 text-right font-bold uppercase">Totais</td>
                                     <td colSpan={ALL_SIZES.length} className="border border-black p-2"></td>
-                                    <td className="border border-black p-2 text-right font-bold">{order.totalPieces}</td>
+                                    {/* Usa totais recalculados */}
+                                    <td className="border border-black p-2 text-right font-bold">{calculatedTotalPieces}</td>
                                     <td className="border border-black p-2 text-right font-bold">-</td>
                                 </tr>
                                 {order.discountValue > 0 && (
@@ -617,13 +622,19 @@ const AdminOrderList: React.FC = () => {
                                           Desconto: {order.discountType === 'percentage' ? `${order.discountValue}%` : `R$ ${order.discountValue}`}
                                        </td>
                                        <td className="border border-black p-2 text-right text-red-600 font-bold">
-                                         - {order.discountType === 'percentage' ? ((order.subtotalValue * order.discountValue)/100).toFixed(2) : order.discountValue.toFixed(2)}
+                                         - {order.discountType === 'percentage' ? ((calculatedSubtotal * order.discountValue)/100).toFixed(2) : order.discountValue.toFixed(2)}
                                        </td>
                                     </tr>
                                 )}
                                 <tr className="text-lg">
                                      <td colSpan={ALL_SIZES.length + 3} className="border border-black p-2 text-right uppercase font-bold">Total Final</td>
-                                     <td className="border border-black p-2 text-right font-bold">R$ {(order.finalTotalValue || 0).toFixed(2)}</td>
+                                     <td className="border border-black p-2 text-right font-bold">
+                                        R$ {(
+                                            order.discountType === 'percentage' 
+                                            ? calculatedSubtotal * (1 - order.discountValue/100) 
+                                            : calculatedSubtotal - order.discountValue
+                                        ).toFixed(2)}
+                                     </td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -636,14 +647,14 @@ const AdminOrderList: React.FC = () => {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
           )}
         </div>
       </div>
 
-      {/* SEPARATION / PICKING MODAL */}
+      {/* SEPARATION / PICKING MODAL (Conteúdo Mantido) */}
       {pickingOrder && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4 animate-fade-in">
               <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -801,11 +812,12 @@ const AdminOrderList: React.FC = () => {
           </div>
       )}
 
-      {/* Aggregation Modal */}
+      {/* Aggregation Modal (Mantido) */}
       {showAggregation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print p-2 md:p-4">
           <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
-            <div className="p-4 md:p-6 border-b flex justify-between items-center bg-purple-50">
+            {/* ... Conteúdo do Modal de Soma ... */}
+             <div className="p-4 md:p-6 border-b flex justify-between items-center bg-purple-50">
               <div>
                 <h2 className="text-lg md:text-xl font-bold text-purple-900 flex items-center">
                   <Calculator className="w-5 h-5 mr-2" /> Resumo de Produção
