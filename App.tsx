@@ -11,7 +11,8 @@ import RepOrderForm from './components/RepOrderForm';
 import RepOrderList from './components/RepOrderList';
 import RepPriceManager from './components/RepPriceManager';
 import AdminReports from './components/AdminReports';
-import RepReports from './components/RepReports'; // Novo import
+import RepReports from './components/RepReports';
+import StockReport from './components/StockReport'; // Novo import
 import { User, Role } from './types';
 import { initializeStorage } from './services/storageService';
 
@@ -64,6 +65,7 @@ const App: React.FC = () => {
         <>
           {activeTab === 'dashboard' && <AdminDashboard onNavigate={setActiveTab} />}
           {activeTab === 'reports' && <AdminReports />}
+          {activeTab === 'stock-report' && <StockReport />}
           {activeTab === 'orders' && <AdminOrderList />}
           {activeTab === 'products' && <ProductManager />}
           {activeTab === 'reps' && <RepManager />}
@@ -77,7 +79,6 @@ const App: React.FC = () => {
           {activeTab === 'new-order' && <RepOrderForm user={user} onOrderCreated={() => setActiveTab('rep-dashboard')} />}
           {activeTab === 'clients' && <ClientManager user={user} />}
           {activeTab === 'prices' && <RepPriceManager user={user} />}
-          {/* Nova Rota */}
           {activeTab === 'rep-reports' && <RepReports user={user} />}
         </>
       )}

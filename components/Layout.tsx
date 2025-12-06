@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, Role } from '../types';
-import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X, DollarSign, FileBarChart, PieChart } from 'lucide-react';
+import { LogOut, LayoutDashboard, ShoppingCart, Users, Package, Shirt, Menu, X, DollarSign, FileBarChart, PieChart, Archive } from 'lucide-react';
 
 interface LayoutProps {
   user: User;
@@ -44,6 +44,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
             <>
               <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard Geral" />
               <NavItem id="reports" icon={FileBarChart} label="Relatórios & Matriz" />
+              <NavItem id="stock-report" icon={Archive} label="Relatório de Estoque" />
               <NavItem id="orders" icon={Package} label="Pedidos & Produção" />
               <NavItem id="products" icon={Shirt} label="Catálogo Produtos" />
               <NavItem id="reps" icon={Users} label="Representantes" />
@@ -54,7 +55,6 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
               <NavItem id="new-order" icon={ShoppingCart} label="Novo Pedido" />
               <NavItem id="clients" icon={Users} label="Meus Clientes" />
               <NavItem id="prices" icon={DollarSign} label="Tabela de Preços" />
-              {/* NOVO ITEM DE MENU */}
               <NavItem id="rep-reports" icon={PieChart} label="Meus Relatórios" />
             </>
           )}
@@ -87,6 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, children, activeTab, se
               <>
                 <NavItem id="dashboard" icon={LayoutDashboard} label="Dashboard" />
                 <NavItem id="reports" icon={FileBarChart} label="Relatórios" />
+                <NavItem id="stock-report" icon={Archive} label="Relat. Estoque" />
                 <NavItem id="orders" icon={Package} label="Pedidos" />
                 <NavItem id="products" icon={Shirt} label="Produtos" />
                 <NavItem id="reps" icon={Users} label="Representantes" />
