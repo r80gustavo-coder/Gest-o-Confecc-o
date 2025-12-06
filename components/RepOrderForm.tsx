@@ -20,7 +20,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
-  const [romaneio, setRomaneio] = useState(''); // Novo estado para Romaneio
+  const [romaneio, setRomaneio] = useState(''); // Novo state para Romaneio
   
   // Descontos
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed' | ''>('');
@@ -58,8 +58,13 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
           setClients(c);
           
           // Mapeia preços para busca rápida
+          // Normaliza a chave para Uppercase para garantir o match com o input do usuário
           const pm: Record<string, number> = {};
-          prices.forEach(pr => pm[pr.reference] = pr.price);
+          prices.forEach(pr => {
+              if (pr.reference) {
+                  pm[pr.reference.toUpperCase()] = pr.price;
+              }
+          });
           setPriceMap(pm);
         } catch (e) {
           console.error("Erro ao carregar dados iniciais", e);
@@ -83,9 +88,17 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         const prod = products.find(p => p.reference === currentRef);
         if (prod) setCurrentGrid(prod.gridType);
         
-        // AUTO-PREENCHIMENTO DO PREÇO
-        const configPrice = priceMap[currentRef] || 0;
-        setManualUnitPrice(configPrice > 0 ? configPrice.toFixed(2) : '');
+        // AUTO-PREENCHIMENTO DO PREÇO (PRIORIDADE TOTAL À TABELA DO REP)
+        // O currentRef já está em UpperCase devido ao onChange do input.
+        const configPrice = priceMap[currentRef];
+        
+        if (configPrice !== undefined && configPrice > 0) {
+            setManualUnitPrice(configPrice.toFixed(2));
+        } else {
+            // Se não houver preço configurado pelo Representante, deixa em branco.
+            // NÃO usa o preço base (custo) do administrador.
+            setManualUnitPrice('');
+        }
       }
     } else {
       setAvailableColors([]);
