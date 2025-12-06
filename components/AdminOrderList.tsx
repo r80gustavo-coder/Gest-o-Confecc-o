@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { Order, OrderItem, ProductDef } from '../types';
+import { Order, OrderItem, ProductDef, SIZE_GRIDS } from '../types';
 import { getOrders, updateOrderStatus, saveOrderPicking, getProducts } from '../services/storageService';
 import { supabase } from '../services/supabaseClient'; // Importação do Supabase para Realtime
-import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw } from 'lucide-react';
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
@@ -24,6 +24,10 @@ const AdminOrderList: React.FC = () => {
   const [pickingOrder, setPickingOrder] = useState<Order | null>(null);
   const [pickingItems, setPickingItems] = useState<OrderItem[]>([]);
   const [savingPicking, setSavingPicking] = useState(false);
+
+  // Add Item States inside Modal
+  const [addRef, setAddRef] = useState('');
+  const [addColor, setAddColor] = useState('');
 
   // NOVO: Estado para notificação de novo pedido
   const [newOrderNotification, setNewOrderNotification] = useState(false);
@@ -115,6 +119,8 @@ const AdminOrderList: React.FC = () => {
       }));
       setPickingOrder(order);
       setPickingItems(itemsCopy);
+      setAddRef('');
+      setAddColor('');
   };
 
   const handlePickingChange = (itemIdx: number, size: string, val: string) => {
@@ -129,6 +135,42 @@ const AdminOrderList: React.FC = () => {
           delete newItems[itemIdx].picked![size];
       }
       setPickingItems(newItems);
+  };
+
+  const handleAddItem = () => {
+      if (!addRef || !addColor) return;
+      
+      const product = products.find(p => p.reference === addRef && p.color === addColor);
+      if (!product) return;
+
+      // Check if already exists in list
+      const exists = pickingItems.some(i => i.reference === addRef && i.color === addColor);
+      if (exists) {
+          alert('Este produto já está na lista.');
+          return;
+      }
+
+      const newItem: OrderItem = {
+          reference: product.reference,
+          color: product.color,
+          gridType: product.gridType,
+          sizes: {}, // Quantidade PEDIDA é 0 para item extra
+          picked: {}, // Inicializa vazio
+          totalQty: 0,
+          unitPrice: product.basePrice || 0, // Usa preço base como referência ou 0
+          totalItemValue: 0
+      };
+
+      setPickingItems([...pickingItems, newItem]);
+      setAddColor(''); // Reseta só a cor para facilitar adicionar outra
+  };
+
+  const handleRemoveItem = (index: number) => {
+      if (confirm('Tem certeza que deseja remover este item do pedido? Se ele tiver sido baixado do estoque, a quantidade retornará ao estoque.')) {
+          const newItems = [...pickingItems];
+          newItems.splice(index, 1);
+          setPickingItems(newItems);
+      }
   };
 
   const savePicking = async () => {
@@ -148,6 +190,12 @@ const AdminOrderList: React.FC = () => {
           setSavingPicking(false);
       }
   };
+
+  // Unique refs for dropdown in Modal
+  const uniqueRefs = Array.from(new Set(products.map(p => p.reference))).sort();
+  const availableColors = addRef 
+      ? products.filter(p => p.reference === addRef).map(p => p.color).sort()
+      : [];
 
   // --- PRINT LOGIC ---
   const handlePrintIndividual = async (order: Order) => {
@@ -535,7 +583,7 @@ const AdminOrderList: React.FC = () => {
       {/* SEPARATION / PICKING MODAL */}
       {pickingOrder && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4 animate-fade-in">
-              <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
+              <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
                    <div className="p-4 border-b flex justify-between items-center bg-orange-50 rounded-t-lg">
                         <div>
                             <h2 className="text-lg font-bold text-orange-900 flex items-center">
@@ -549,6 +597,40 @@ const AdminOrderList: React.FC = () => {
                             <X className="w-6 h-6 text-orange-800" />
                         </button>
                     </div>
+                    
+                    {/* ADICIONAR ITEM NA SEPARAÇÃO */}
+                    <div className="p-3 bg-gray-100 border-b flex flex-col md:flex-row gap-2 items-center">
+                        <span className="text-sm font-bold text-gray-600 flex items-center">
+                            <Plus className="w-4 h-4 mr-1" /> Incluir Ref:
+                        </span>
+                        <select 
+                            className="border p-1.5 rounded text-sm w-full md:w-40"
+                            value={addRef}
+                            onChange={(e) => {
+                                setAddRef(e.target.value);
+                                setAddColor('');
+                            }}
+                        >
+                            <option value="">Ref...</option>
+                            {uniqueRefs.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <select 
+                            className="border p-1.5 rounded text-sm w-full md:w-40"
+                            value={addColor}
+                            onChange={(e) => setAddColor(e.target.value)}
+                            disabled={!addRef}
+                        >
+                            <option value="">Cor...</option>
+                            {availableColors.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <button 
+                            onClick={handleAddItem}
+                            disabled={!addRef || !addColor}
+                            className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-blue-700 disabled:opacity-50 w-full md:w-auto"
+                        >
+                            Adicionar
+                        </button>
+                    </div>
 
                     <div className="p-4 overflow-y-auto flex-1 bg-gray-50">
                         <table className="w-full text-sm border-collapse bg-white shadow-sm rounded-lg">
@@ -557,6 +639,7 @@ const AdminOrderList: React.FC = () => {
                                     <th className="p-3 text-left">Produto</th>
                                     <th className="p-3 text-left">Controle de Estoque</th>
                                     <th className="p-3 text-center">Tamanhos</th>
+                                    <th className="p-3 text-center w-10">Ações</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -592,9 +675,11 @@ const AdminOrderList: React.FC = () => {
                                         </td>
                                         <td className="p-3">
                                             <div className="flex flex-wrap gap-4 justify-center">
-                                                {Object.entries(item.sizes).map(([size, qty]) => {
+                                                {SIZE_GRIDS[item.gridType].map((size) => {
+                                                    const qty = item.sizes[size] || 0; // Quantidade PEDIDA
                                                     const picked = item.picked?.[size] || 0;
-                                                    const isComplete = picked >= qty;
+                                                    const isComplete = picked >= qty && qty > 0;
+                                                    
                                                     return (
                                                         <div key={size} className="flex flex-col items-center border rounded p-2 bg-gray-50">
                                                             <span className="text-xs font-bold text-gray-500 mb-1">{size}</span>
@@ -617,6 +702,15 @@ const AdminOrderList: React.FC = () => {
                                                     )
                                                 })}
                                             </div>
+                                        </td>
+                                        <td className="p-3 text-center align-middle">
+                                            <button 
+                                                onClick={() => handleRemoveItem(idx)}
+                                                className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded"
+                                                title="Remover Item"
+                                            >
+                                                <Trash className="w-5 h-5" />
+                                            </button>
                                         </td>
                                     </tr>
                                 )})}

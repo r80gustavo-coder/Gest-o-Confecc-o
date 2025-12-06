@@ -140,29 +140,52 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
     // 2. Calcula diferença e atualiza estoque APENAS para produtos LIVRES (enforceStock = false)
     const currentProducts = await getProducts();
 
-    for (let i = 0; i < newItems.length; i++) {
-        const newItem = newItems[i];
-        const oldItem = oldItems[i]; // Assume que a ordem dos itens não muda
+    // Cria um mapa unificado de todos os produtos envolvidos (Old + New)
+    const processedKeys = new Set<string>();
+    
+    // Função auxiliar para criar chave única
+    const getKey = (ref: string, color: string) => `${ref}:::${color}`;
 
-        const product = currentProducts.find(
-            p => p.reference === newItem.reference && p.color === newItem.color
-        );
+    // Mapeia itens antigos
+    const oldMap: Record<string, OrderItem> = {};
+    oldItems.forEach(i => oldMap[getKey(i.reference, i.color)] = i);
 
-        // Se o produto existe e é LIVRE (enforceStock == false), controlamos o estoque na separação
+    // Mapeia itens novos
+    const newMap: Record<string, OrderItem> = {};
+    newItems.forEach(i => newMap[getKey(i.reference, i.color)] = i);
+
+    // Adiciona todas as chaves ao Set para iterar
+    Object.keys(oldMap).forEach(k => processedKeys.add(k));
+    Object.keys(newMap).forEach(k => processedKeys.add(k));
+
+    for (const key of processedKeys) {
+        const [ref, color] = key.split(':::');
+        
+        const oldItem = oldMap[key];
+        const newItem = newMap[key];
+
+        const product = currentProducts.find(p => p.reference === ref && p.color === color);
+
+        // Só mexe no estoque se o produto for LIVRE (enforceStock == false)
+        // Produtos travados já tiveram baixa na criação do pedido (ou deveriam ter)
         if (product && !product.enforceStock) {
             let stockChanged = false;
             const newStock = { ...product.stock };
-
-            const newPicked = newItem.picked || {};
-            const oldPicked = oldItem.picked || {};
-
-            // Itera sobre os tamanhos para ver a diferença
-            const allSizes = new Set([...Object.keys(newPicked), ...Object.keys(oldPicked)]);
             
+            // Pega o picked antigo (0 se o item não existia antes)
+            const oldPicked = oldItem?.picked || {};
+            // Pega o picked novo (0 se o item foi deletado)
+            const newPicked = newItem?.picked || {};
+
+            const allSizes = new Set([...Object.keys(oldPicked), ...Object.keys(newPicked)]);
+
             allSizes.forEach(size => {
-                const qNew = newPicked[size] || 0;
                 const qOld = oldPicked[size] || 0;
-                const delta = qNew - qOld; // Se positivo, separou mais (baixa estoque). Se negativo, devolveu (sobe estoque).
+                const qNew = newPicked[size] || 0;
+                
+                const delta = qNew - qOld; 
+                // Se delta positivo: separou mais -> baixa estoque
+                // Se delta negativo: devolveu/cancelou -> sobe estoque
 
                 if (delta !== 0) {
                     const currentStockQty = newStock[size] || 0;
