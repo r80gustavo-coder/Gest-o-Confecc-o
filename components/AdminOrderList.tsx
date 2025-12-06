@@ -615,7 +615,7 @@ const AdminOrderList: React.FC = () => {
   };
 
   // Logic to aggregate items from selected orders
-  const getAggregatedItems = () => {
+  const getAggregatedItems = (): OrderItem[] => {
     const selected = orders.filter(o => selectedOrderIds.has(o.id));
     const aggregation: Record<string, OrderItem> = {}; // Key: Ref-Color
 
@@ -640,7 +640,7 @@ const AdminOrderList: React.FC = () => {
     return Object.values(aggregation).sort((a, b) => a.reference.localeCompare(b.reference));
   };
 
-  const aggregatedItems = showAggregation ? getAggregatedItems() : [];
+  const aggregatedItems: OrderItem[] = showAggregation ? getAggregatedItems() : [];
 
   const handlePrintAggregation = () => {
     const win = window.open('', '', 'height=800,width=1000');
@@ -1017,29 +1017,26 @@ const AdminOrderList: React.FC = () => {
                             <tbody>
                                 {order.items.map((item, idx) => {
                                     // CÁLCULO DINÂMICO PARA O PDF
-                                    // Se tem Romaneio, usa ESTRITAMENTE o que foi separado.
-                                    // Se o Romaneio existir, assumimos que a fase de separação acabou.
-                                    const useStrictPicking = !!order.romaneio;
+                                    // CORREÇÃO: Se tem Romaneio ou é Parcial, o pedido já foi processado e salvo com os itens corretos em 'sizes'.
+                                    // Portanto, devemos confiar em 'sizes' se for Finalizado/Parcial.
+                                    // Apenas se for Aberto, olhamos para 'picked' para mostrar progresso (se desejado), mas padrão é mostrar o pedido.
+                                    
+                                    const isFinalized = !!order.romaneio || !!order.isPartial;
 
                                     let displayRowTotal = 0;
                                     const cells = ALL_SIZES.map(s => {
                                         let numVal = 0;
-                                        if (useStrictPicking) {
-                                            // Se finalizado, usa apenas o 'picked'. Se não houver picked, é 0.
-                                            numVal = item.picked ? (item.picked[s] as number || 0) : 0;
-                                        } else {
-                                            // Se aberto, usa híbrido (picked se existir, senão ordered)
-                                            const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-                                            numVal = typeof val === 'number' ? val : 0;
-                                        }
+                                        // Se Finalizado/Parcial: Use SIZES (pois o processo de split moveu picked -> sizes)
+                                        // Se Aberto: Use SIZES (mostra o pedido original)
+                                        // A visualização de 'Picked' só é relevante no modal de separação.
+                                        numVal = (item.sizes && item.sizes[s]) || 0;
                                         
                                         displayRowTotal += numVal;
                                         return numVal;
                                     });
 
-                                    // Se o pedido está finalizado (tem Romaneio) e o total separado deste item for 0,
-                                    // NÃO exibe a linha no PDF.
-                                    if (useStrictPicking && displayRowTotal === 0) {
+                                    // Se o total desta linha for 0, não exibe
+                                    if (displayRowTotal === 0) {
                                         return null;
                                     }
 
@@ -1305,6 +1302,60 @@ const AdminOrderList: React.FC = () => {
                         </table>
                     </div>
 
+                    {/* BARRA DE TOTAIS EM TEMPO REAL NO MODAL DE SEPARAÇÃO */}
+                    <div className="bg-orange-50 p-4 border-t border-orange-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="flex gap-6 items-center">
+                            {(() => {
+                                // Cálculo em Tempo Real
+                                let currentPickedQty = 0;
+                                let currentPickedValue = 0;
+                                let currentOrderQty = 0;
+
+                                pickingItems.forEach(item => {
+                                    // Preço unitário garantido (igual lógica de Partial)
+                                    let unitPrice = item.unitPrice;
+                                    if (!unitPrice || unitPrice === 0) {
+                                        const normalizedRef = item.reference.trim().toUpperCase();
+                                        if (currentRepPriceMap[normalizedRef]) {
+                                            unitPrice = currentRepPriceMap[normalizedRef];
+                                        } else {
+                                            const prod = products.find(p => p.reference === item.reference && p.color === item.color);
+                                            if (prod) unitPrice = prod.basePrice || 0;
+                                        }
+                                    }
+
+                                    // Soma Quantidade Pedida
+                                    const ordered = Object.values(item.sizes).reduce((a,b) => a + (b as number), 0);
+                                    currentOrderQty += ordered;
+
+                                    // Soma Quantidade Separada (Picked)
+                                    const picked = item.picked ? Object.values(item.picked).reduce((a,b) => a + (b as number), 0) : 0;
+                                    currentPickedQty += picked;
+                                    currentPickedValue += (picked * unitPrice);
+                                });
+
+                                return (
+                                    <>
+                                        <div className="text-gray-600 text-sm">
+                                            Total Pedido: <span className="font-bold">{currentOrderQty} pçs</span>
+                                        </div>
+                                        <div className="bg-white px-4 py-2 rounded shadow-sm border border-green-200 flex items-center gap-3">
+                                            <div>
+                                                <span className="block text-xs font-bold text-gray-500 uppercase">Total Selecionado (Baixa)</span>
+                                                <span className="text-xl font-bold text-green-700">{currentPickedQty} pçs</span>
+                                            </div>
+                                            <div className="h-8 w-px bg-gray-300 mx-1"></div>
+                                            <div>
+                                                <span className="block text-xs font-bold text-gray-500 uppercase">Valor Atual</span>
+                                                <span className="text-xl font-bold text-green-700">R$ {currentPickedValue.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+
                     {/* RODAPÉ DO MODAL COM NOVAS OPÇÕES */}
                     <div className="p-4 border-t bg-white rounded-b-lg flex flex-col md:flex-row justify-between items-center gap-3">
                          <div className="text-xs text-gray-500 w-full md:w-auto text-center md:text-left">
@@ -1452,11 +1503,11 @@ const AdminOrderList: React.FC = () => {
                     <tr>
                         <td colSpan={2} className="border p-3 text-right">TOTAL:</td>
                         {ALL_SIZES.map(s => {
-                            const colTotal = aggregatedItems.reduce((acc, i) => acc + (i.sizes[s] || 0), 0);
+                            const colTotal = aggregatedItems.reduce((acc, i) => acc + (Number(i.sizes[s]) || 0), 0);
                             return <td key={s} className="border p-3 text-center">{colTotal || ''}</td>
                         })}
                         <td className="border p-3 text-right text-xl">
-                            {aggregatedItems.reduce((acc, i) => acc + i.totalQty, 0)}
+                            {aggregatedItems.reduce((acc, i) => acc + (i.totalQty || 0), 0)}
                         </td>
                     </tr>
                 </tfoot>
