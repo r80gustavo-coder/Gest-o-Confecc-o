@@ -1,21 +1,25 @@
 
 import React, { useState, useEffect } from 'react';
-import { Order, OrderItem, ProductDef, SIZE_GRIDS } from '../types';
-import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio } from '../services/storageService';
+import { Order, OrderItem, ProductDef, SIZE_GRIDS, User, Role } from '../types';
+import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers } from '../services/storageService';
 import { supabase } from '../services/supabaseClient'; // Importação do Supabase para Realtime
-import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check, Truck } from 'lucide-react';
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check, Truck, Filter, User as UserIcon } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const AdminOrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<ProductDef[]>([]); 
+  const [reps, setReps] = useState<User[]>([]); // Lista de representantes para o filtro
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   
-  // Date Range Filters
+  // Filters
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedRepId, setSelectedRepId] = useState(''); // Filtro por Representante
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'finalized'>('all'); // Filtro Aberto/Finalizado
+  const [romaneioSearch, setRomaneioSearch] = useState(''); // Busca por Romaneio
   
   // Aggregation Modal State
   const [showAggregation, setShowAggregation] = useState(false);
@@ -38,14 +42,16 @@ const AdminOrderList: React.FC = () => {
   const fetchData = async (isBackgroundUpdate = false) => {
     if (!isBackgroundUpdate) setLoading(true);
     
-    // Busca pedidos e produtos em paralelo
-    const [ordersData, productsData] = await Promise.all([
+    // Busca pedidos, produtos e usuários (para filtro de reps) em paralelo
+    const [ordersData, productsData, usersData] = await Promise.all([
         getOrders(),
-        getProducts()
+        getProducts(),
+        getUsers()
     ]);
     
     setOrders(ordersData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
     setProducts(productsData);
+    setReps(usersData.filter(u => u.role === Role.REP));
     
     if (!isBackgroundUpdate) setLoading(false);
   };
@@ -98,10 +104,30 @@ const AdminOrderList: React.FC = () => {
   };
 
   const filteredOrders = orders.filter(o => {
+    // 1. Prioridade Máxima: Busca por Romaneio (se digitado, ignora datas para facilitar rastreio)
+    if (romaneioSearch) {
+        return o.romaneio && o.romaneio.includes(romaneioSearch);
+    }
+
+    // 2. Filtros de Data
     const orderDate = o.createdAt.split('T')[0];
     const afterStart = !startDate || orderDate >= startDate;
     const beforeEnd = !endDate || orderDate <= endDate;
-    return afterStart && beforeEnd;
+    
+    // 3. Filtro de Representante
+    const matchRep = !selectedRepId || o.repId === selectedRepId;
+
+    // 4. Filtro de Status (Aberto vs Finalizado/Romaneio)
+    let matchStatus = true;
+    if (statusFilter === 'open') {
+        // Aberto = SEM romaneio
+        matchStatus = !o.romaneio;
+    } else if (statusFilter === 'finalized') {
+        // Finalizado = COM romaneio
+        matchStatus = !!o.romaneio;
+    }
+
+    return afterStart && beforeEnd && matchRep && matchStatus;
   });
 
   const handleSelectAllFiltered = () => {
@@ -452,52 +478,112 @@ const AdminOrderList: React.FC = () => {
           </div>
       )}
 
-      {/* Header e Filtros (Omitidos para brevidade, mantêm-se iguais) */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 no-print bg-white p-4 rounded-lg shadow-sm">
-        <div className="flex items-center gap-2">
-            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
-            {loading && <Loader2 className="animate-spin w-5 h-5 text-blue-600" />}
-        </div>
-        
-        <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-start md:items-center w-full xl:w-auto">
-           <div className="flex gap-2 w-full md:w-auto">
-             <div className="flex-1">
-                <span className="text-xs text-gray-500 font-medium block">De:</span>
-                <input 
-                  type="date" 
-                  className="border p-2 rounded shadow-sm text-sm w-full" 
-                  value={startDate} 
-                  onChange={(e) => setStartDate(e.target.value)} 
-                />
-             </div>
-             <div className="flex-1">
-                <span className="text-xs text-gray-500 font-medium block">Até:</span>
-                <input 
-                  type="date" 
-                  className="border p-2 rounded shadow-sm text-sm w-full" 
-                  value={endDate} 
-                  onChange={(e) => setEndDate(e.target.value)} 
-                />
-             </div>
-           </div>
-           
-           <button 
-             onClick={() => fetchData()}
-             className="bg-gray-100 text-gray-700 p-2 rounded hover:bg-gray-200 shadow-sm mt-2 md:mt-0"
-             title="Atualizar Lista Manualmente"
-           >
-             <RefreshCw className="w-5 h-5" />
-           </button>
+      {/* Header e Filtros */}
+      <div className="no-print bg-white p-4 rounded-lg shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-2">
+                <h2 className="text-xl md:text-2xl font-bold text-gray-800">Gestão de Pedidos</h2>
+                {loading && <Loader2 className="animate-spin w-5 h-5 text-blue-600" />}
+            </div>
+            
+            <div className="flex gap-2">
+                <button 
+                    onClick={() => fetchData()}
+                    className="bg-gray-100 text-gray-700 p-2 rounded hover:bg-gray-200 shadow-sm"
+                    title="Atualizar Lista Manualmente"
+                >
+                    <RefreshCw className="w-5 h-5" />
+                </button>
 
-           {selectedOrderIds.size > 0 && (
-             <button 
-               onClick={() => setShowAggregation(true)}
-               className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center justify-center shadow transition w-full md:w-auto mt-2 md:mt-0"
-             >
-               <Calculator className="w-4 h-4 mr-2" />
-               Somar ({selectedOrderIds.size})
-             </button>
-           )}
+                {selectedOrderIds.size > 0 && (
+                    <button 
+                    onClick={() => setShowAggregation(true)}
+                    className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex items-center justify-center shadow transition"
+                    >
+                    <Calculator className="w-4 h-4 mr-2" />
+                    Somar ({selectedOrderIds.size})
+                    </button>
+                )}
+            </div>
+        </div>
+
+        {/* ÁREA DE FILTROS AVANÇADOS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+             {/* 1. Busca por Romaneio (Alta Prioridade) */}
+             <div className="lg:col-span-1">
+                <label className="text-xs font-bold text-gray-500 block mb-1">Rastrear Romaneio</label>
+                <div className="relative">
+                    <Truck className="w-4 h-4 absolute left-3 top-2.5 text-blue-500" />
+                    <input 
+                        type="text" 
+                        placeholder="Digite o código..." 
+                        className="w-full pl-9 p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 border-blue-200 bg-blue-50"
+                        value={romaneioSearch}
+                        onChange={(e) => setRomaneioSearch(e.target.value)}
+                    />
+                </div>
+             </div>
+
+             {/* 2. Status (Aberto/Finalizado) */}
+             <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1">Status do Pedido</label>
+                <div className="relative">
+                    <Filter className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                    <select 
+                        className="w-full pl-9 p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value as any)}
+                        disabled={!!romaneioSearch}
+                    >
+                        <option value="all">Todos</option>
+                        <option value="open">Aberto (Sem Romaneio)</option>
+                        <option value="finalized">Finalizado (Com Romaneio)</option>
+                    </select>
+                </div>
+             </div>
+
+             {/* 3. Representante */}
+             <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1">Representante</label>
+                <div className="relative">
+                    <UserIcon className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+                    <select 
+                        className="w-full pl-9 p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                        value={selectedRepId}
+                        onChange={(e) => setSelectedRepId(e.target.value)}
+                        disabled={!!romaneioSearch}
+                    >
+                        <option value="">Todos</option>
+                        {reps.map(r => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                    </select>
+                </div>
+             </div>
+
+             {/* 4. Data Inicial */}
+             <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1">De</label>
+                <input 
+                  type="date" 
+                  className="w-full border p-2 rounded text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400" 
+                  value={startDate} 
+                  onChange={(e) => setStartDate(e.target.value)}
+                  disabled={!!romaneioSearch} 
+                />
+             </div>
+
+             {/* 5. Data Final */}
+             <div>
+                <label className="text-xs font-bold text-gray-500 block mb-1">Até</label>
+                <input 
+                  type="date" 
+                  className="w-full border p-2 rounded text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400" 
+                  value={endDate} 
+                  onChange={(e) => setEndDate(e.target.value)}
+                  disabled={!!romaneioSearch} 
+                />
+             </div>
         </div>
       </div>
 
@@ -530,7 +616,7 @@ const AdminOrderList: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredOrders.length === 0 ? (
-                  <tr><td colSpan={9} className="p-8 text-center text-gray-400">Nenhum pedido encontrado neste período.</td></tr>
+                  <tr><td colSpan={9} className="p-8 text-center text-gray-400">Nenhum pedido encontrado.</td></tr>
               ) : filteredOrders.map(order => {
                 
                 // --- CÁLCULO DE TOTAIS REAIS PARA IMPRESSÃO (NOVO) ---
@@ -565,13 +651,13 @@ const AdminOrderList: React.FC = () => {
                   <td className="p-4 text-center font-bold text-gray-600">{order.totalPieces}</td>
                   <td className="p-4 text-center font-bold text-green-600">R$ {(order.finalTotalValue || 0).toFixed(2)}</td>
                   <td className="p-4 text-center">
-                    {order.status === 'printed' ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <CheckCircle className="w-3 h-3 mr-1" /> Impresso
+                    {order.romaneio ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                        <CheckCircle className="w-3 h-3 mr-1" /> Finalizado
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        Aberto
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+                         Aberto
                       </span>
                     )}
                   </td>
