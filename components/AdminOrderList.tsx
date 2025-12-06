@@ -360,9 +360,43 @@ const AdminOrderList: React.FC = () => {
           let totalPickedCount = 0;
 
           pickingItems.forEach(item => {
+               // --- CORREÇÃO DE PREÇO ---
+               // Garante que o preço unitário seja buscado da tabela do representante ou do cadastro
+               // caso o item esteja com preço 0 (erro comum em pedidos legados ou se perdidos).
+               let unitPriceToUse = item.unitPrice;
+
+               if (!unitPriceToUse || unitPriceToUse === 0) {
+                   const normalizedRef = item.reference.trim().toUpperCase();
+                   // 1. Tenta Tabela do Representante (Prioridade)
+                   if (currentRepPriceMap[normalizedRef]) {
+                       unitPriceToUse = currentRepPriceMap[normalizedRef];
+                   } else {
+                       // 2. Tenta Preço Base do Produto
+                       const prod = products.find(p => p.reference === item.reference && p.color === item.color);
+                       if (prod) {
+                           unitPriceToUse = prod.basePrice || 0;
+                       }
+                   }
+               }
+
                // Clone para garantir
-               const deliveryItem: OrderItem = { ...item, sizes: {}, picked: undefined, totalQty: 0, totalItemValue: 0 };
-               const remainingItem: OrderItem = { ...item, sizes: {}, picked: {}, totalQty: 0, totalItemValue: 0 };
+               const deliveryItem: OrderItem = { 
+                   ...item, 
+                   unitPrice: unitPriceToUse, // Aplica preço corrigido
+                   sizes: {}, 
+                   picked: undefined, 
+                   totalQty: 0, 
+                   totalItemValue: 0 
+               };
+               
+               const remainingItem: OrderItem = { 
+                   ...item, 
+                   unitPrice: unitPriceToUse, // Aplica preço corrigido
+                   sizes: {}, 
+                   picked: {}, 
+                   totalQty: 0, 
+                   totalItemValue: 0 
+               };
 
                let itemHasDelivery = false;
                let itemHasRemaining = false;
@@ -389,7 +423,7 @@ const AdminOrderList: React.FC = () => {
                    }
                });
 
-               // Recalcula totais
+               // Recalcula totais com o preço corrigido
                if (itemHasDelivery) {
                     deliveryItem.totalQty = Object.values(deliveryItem.sizes).reduce((a, b) => a + (b as number), 0);
                     deliveryItem.totalItemValue = deliveryItem.totalQty * deliveryItem.unitPrice;
@@ -408,16 +442,6 @@ const AdminOrderList: React.FC = () => {
               setSavingPicking(false);
               return;
           }
-
-          // 3. Criar o NOVO Pedido (Finalizado com Romaneio)
-          // Usamos addOrder. Importante: addOrder tenta baixar estoque. 
-          // Mas como estamos mexendo no pedido original também, precisamos garantir que o saldo final de estoque esteja correto.
-          // Estrategia:
-          // A. Criar pedido novo (addOrder baixa estoque dos itens bipados).
-          // B. Atualizar pedido antigo (Resetar picked para 0, Reduzir sizes). Chamar saveOrderPicking.
-          // saveOrderPicking vai ver que picked foi de X para 0. Isso DEVOLVERIA o estoque.
-          // Logo: addOrder (Tira X) + saveOrderPicking (Devolve X) = 0 alteração de estoque físico.
-          // ISSO ESTÁ CORRETO! O estoque já foi fisicamente separado. Apenas transferimos a propriedade do pedido A para B.
 
           const deliverySubtotal = deliveryItems.reduce((acc, i) => acc + i.totalItemValue, 0);
           
@@ -456,9 +480,6 @@ const AdminOrderList: React.FC = () => {
           await addOrder(deliveryOrderPayload);
 
           // 4. Atualizar o Pedido ORIGINAL (Saldo Aberto)
-          // Removemos o que foi entregue, zeramos o picked.
-          // O saveOrderPicking recalcula valores e atualiza estoque (devolvendo o que "saiu" do picked)
-          
           await saveOrderPicking(pickingOrder.id, pickingOrder.items, remainingItems);
 
           // Refresh e Fechar
@@ -489,12 +510,29 @@ const AdminOrderList: React.FC = () => {
 
       try {
           // Ajusta os itens: Sizes passa a ser igual a Picked.
-          // Se picked for 0 ou vazio, remove o tamanho/item.
-          
           const finalItems: OrderItem[] = [];
 
           pickingItems.forEach(item => {
-               const newItem: OrderItem = { ...item, sizes: {}, picked: undefined, totalQty: 0, totalItemValue: 0 };
+               // --- CORREÇÃO DE PREÇO (IGUAL À PARCIAL) ---
+               let unitPriceToUse = item.unitPrice;
+               if (!unitPriceToUse || unitPriceToUse === 0) {
+                   const normalizedRef = item.reference.trim().toUpperCase();
+                   if (currentRepPriceMap[normalizedRef]) {
+                       unitPriceToUse = currentRepPriceMap[normalizedRef];
+                   } else {
+                       const prod = products.find(p => p.reference === item.reference && p.color === item.color);
+                       if (prod) unitPriceToUse = prod.basePrice || 0;
+                   }
+               }
+
+               const newItem: OrderItem = { 
+                   ...item, 
+                   unitPrice: unitPriceToUse, // Aplica preço corrigido
+                   sizes: {}, 
+                   picked: undefined, 
+                   totalQty: 0, 
+                   totalItemValue: 0 
+               };
                let hasContent = false;
 
                const allSizes = new Set([...Object.keys(item.sizes), ...Object.keys(item.picked || {})]);
@@ -516,7 +554,6 @@ const AdminOrderList: React.FC = () => {
           });
 
           // 1. Atualiza itens e estoque (saveOrderPicking)
-          // Ao mudar sizes de 10 para 4 (pq picked foi 4), o estoque devolve 6.
           await saveOrderPicking(pickingOrder.id, pickingOrder.items, finalItems);
 
           // 2. Define Romaneio
