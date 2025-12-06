@@ -143,15 +143,21 @@ const AdminOrderList: React.FC = () => {
 
   // NOVO: Função para alterar a quantidade PEDIDA (apenas para itens novos ou em edição)
   const handleOrderQtyChange = (itemIdx: number, size: string, val: string) => {
-      const num = parseInt(val);
+      const num = parseInt(val) || 0; // Se vazio ou inválido, considera 0 para cálculos
       const newItems = [...pickingItems];
       if (!newItems[itemIdx].sizes) newItems[itemIdx].sizes = {};
 
-      if (!isNaN(num) && num >= 0) {
+      if (val !== '' && num >= 0) {
           newItems[itemIdx].sizes[size] = num;
-      } else if (val === '') {
+      } else {
           delete newItems[itemIdx].sizes[size];
       }
+
+      // IMPORTANTE: Recalcula o Total Qty (Pedido) e Total Value imediatamente
+      const newTotalQty = (Object.values(newItems[itemIdx].sizes) as number[]).reduce((acc, curr) => acc + (curr || 0), 0);
+      newItems[itemIdx].totalQty = newTotalQty;
+      newItems[itemIdx].totalItemValue = newTotalQty * newItems[itemIdx].unitPrice;
+
       setPickingItems(newItems);
   };
 

@@ -145,24 +145,30 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
     let newSubtotalValue = 0;
 
     const processedItems = newItems.map(item => {
-        // Soma a quantidade separada (picked)
-        const pickedQty = item.picked ? Object.values(item.picked).reduce((a, b) => a + b, 0) : 0;
+        // Recalcula a Quantidade Pedida (Ordered) com base no objeto sizes (Fonte da Verdade)
+        const orderedQty = item.sizes ? Object.values(item.sizes).reduce((a, b) => a + (b || 0), 0) : 0;
         
-        let quantityForCalc = item.totalQty;
-        
-        // Se houver separação iniciada para este item ou se for item novo
-        if (pickedQty > 0 || item.totalQty === 0) {
-             quantityForCalc = pickedQty;
-             // Atualiza a propriedade totalQty do item para refletir a realidade do que está sendo levado,
-             // caso seja um item novo ou quantidade maior.
-             if (pickedQty > item.totalQty) {
-                 item.totalQty = pickedQty;
-             }
-        }
+        // Atualiza o totalQty do item para refletir fielmente o que foi PEDIDO
+        item.totalQty = orderedQty;
 
-        const itemValue = quantityForCalc * item.unitPrice;
+        // Calcula a Quantidade Separada (Picked)
+        const pickedQty = item.picked ? Object.values(item.picked).reduce((a, b) => a + b, 0) : 0;
+
+        // LÓGICA DE TOTAIS:
+        // O Total de Peças do Pedido (newTotalPieces) deve ser sempre a quantidade PEDIDA (orderedQty).
+        // Isso garante que o indicador "Separação: X / Y" mostre Y correto (ex: 1/13).
+        newTotalPieces += orderedQty;
+
+        // LÓGICA FINANCEIRA (Subtotal):
+        // Se houver separação (pickedQty > 0), normalmente cobra-se o que foi separado.
+        // Se ainda não houve separação, projeta-se o valor do pedido original.
+        // No entanto, para consistência simples, usamos o que for maior ou o pedido, 
+        // mas aqui vamos priorizar o PEDIDO para o valor projetado se nada foi separado,
+        // e o SEPARADO se o processo já começou.
+        // Simplificação: Se picked > 0, usa picked. Se não, usa ordered.
+        const quantityForValue = pickedQty > 0 ? pickedQty : orderedQty;
+        const itemValue = quantityForValue * item.unitPrice;
         
-        newTotalPieces += quantityForCalc;
         newSubtotalValue += itemValue;
 
         return {
