@@ -96,24 +96,27 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${order.items.map(item => `
+                    ${order.items.map(item => {
+                        // CÁLCULO DINÂMICO DO TOTAL DA LINHA
+                        let rowTotal = 0;
+                        const cellsHtml = ALL_SIZES.map(s => {
+                            const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
+                            if(val) rowTotal += (val as number);
+                            return `<td class="text-center">${val || '-'}</td>`;
+                        }).join('');
+
+                        return `
                         <tr>
                             <td class="p-2">
                                 <strong>${item.reference}</strong><br/>
                                 <span class="uppercase text-xs">${item.color}</span>
                             </td>
-                            ${ALL_SIZES.map(s => {
-                                // LÓGICA ATUALIZADA PDF:
-                                // Se existir 'picked' (separação feita), usa o valor separado.
-                                // Caso contrário, usa o valor original do pedido (sizes).
-                                const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-                                return `<td class="text-center">${val || '-'}</td>`;
-                            }).join('')}
-                            <td class="text-right font-bold p-2">${item.totalQty}</td>
+                            ${cellsHtml}
+                            <td class="text-right font-bold p-2">${rowTotal}</td>
                             <td class="text-right p-2">${item.unitPrice.toFixed(2)}</td>
                             <td class="text-right font-bold p-2">${item.totalItemValue.toFixed(2)}</td>
                         </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
                 <tfoot>
                     <tr class="bg-gray-100">

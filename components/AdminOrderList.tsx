@@ -577,27 +577,32 @@ const AdminOrderList: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {order.items.map((item, idx) => (
-                                    <tr key={idx}>
-                                        <td className="border border-black p-1 font-bold">{item.reference}</td>
-                                        <td className="border border-black p-1 uppercase">{item.color}</td>
-                                        {ALL_SIZES.map(s => {
-                                            // Lógica para mostrar quantidade na grade:
-                                            // Se existe quantidade separada (picked), mostra ela. 
-                                            // Caso contrário, mostra a quantidade original do pedido.
-                                            // Isso garante que itens adicionados na separação apareçam no PDF.
-                                            const displayQty = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-                                            
-                                            return (
-                                                <td key={s} className="border border-black p-1 text-center">
-                                                    {displayQty ? <span className="font-bold">{displayQty}</span> : <span className="text-gray-300">-</span>}
+                                {order.items.map((item, idx) => {
+                                    // CÁLCULO DINÂMICO DO TOTAL DA LINHA PARA O PDF
+                                    // Soma as quantidades EXIBIDAS na grade (prioriza 'picked' se existir)
+                                    // Isso garante que a coluna Qtd bata com a soma dos tamanhos, 
+                                    // mesmo se for um item novo incluído na separação.
+                                    let displayRowTotal = 0;
+                                    const cells = ALL_SIZES.map(s => {
+                                        const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
+                                        if (val) displayRowTotal += (val as number);
+                                        return val;
+                                    });
+
+                                    return (
+                                        <tr key={idx}>
+                                            <td className="border border-black p-1 font-bold">{item.reference}</td>
+                                            <td className="border border-black p-1 uppercase">{item.color}</td>
+                                            {cells.map((val, i) => (
+                                                <td key={i} className="border border-black p-1 text-center">
+                                                    {val ? <span className="font-bold">{val}</span> : <span className="text-gray-300">-</span>}
                                                 </td>
-                                            );
-                                        })}
-                                        <td className="border border-black p-1 text-right font-bold">{item.totalQty}</td>
-                                        <td className="border border-black p-1 text-right">{(item.totalItemValue || 0).toFixed(2)}</td>
-                                    </tr>
-                                ))}
+                                            ))}
+                                            <td className="border border-black p-1 text-right font-bold">{displayRowTotal}</td>
+                                            <td className="border border-black p-1 text-right">{(item.totalItemValue || 0).toFixed(2)}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                             <tfoot>
                                 <tr className="bg-gray-100">
