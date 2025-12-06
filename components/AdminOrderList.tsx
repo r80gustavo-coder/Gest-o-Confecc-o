@@ -177,10 +177,10 @@ const AdminOrderList: React.FC = () => {
       if (!pickingOrder) return;
       setSavingPicking(true);
       try {
-          await saveOrderPicking(pickingOrder.id, pickingOrder.items, pickingItems);
+          const updatedOrder = await saveOrderPicking(pickingOrder.id, pickingOrder.items, pickingItems);
           
-          // Atualiza lista local
-          const updatedOrders = orders.map(o => o.id === pickingOrder.id ? { ...o, items: pickingItems } : o);
+          // Atualiza lista local com o objeto retornado do serviço (que já tem os totais recalculados)
+          const updatedOrders = orders.map(o => o.id === pickingOrder.id ? updatedOrder : o);
           setOrders(updatedOrders);
           
           setPickingOrder(null);

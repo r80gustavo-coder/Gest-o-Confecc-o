@@ -128,64 +128,127 @@ export const updateStockOnOrderCreation = async (items: OrderItem[]): Promise<vo
 };
 
 // Função para SALVAR A SEPARAÇÃO e baixar estoque de produtos "Livres".
-export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], newItems: OrderItem[]): Promise<void> => {
-    // 1. Atualiza o Pedido com os novos items (que contém o campo 'picked')
-    const { error } = await supabase
+// AGORA: Recalcula totais do pedido com base na separação
+export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], newItems: OrderItem[]): Promise<Order> => {
+    
+    // 1. Busca dados atuais do pedido para pegar as configurações de desconto
+    const { data: currentOrder, error: fetchError } = await supabase
         .from('orders')
-        .update({ items: newItems })
-        .eq('id', orderId);
+        .select('*')
+        .eq('id', orderId)
+        .single();
+    
+    if (fetchError) throw fetchError;
+
+    // 2. Recalcula os totais com base nos novos itens
+    let newTotalPieces = 0;
+    let newSubtotalValue = 0;
+
+    const processedItems = newItems.map(item => {
+        // Soma a quantidade separada (picked)
+        const pickedQty = item.picked ? Object.values(item.picked).reduce((a, b) => a + b, 0) : 0;
+        
+        // Regra de Negócio: Se a quantidade separada for MAIOR que a pedida, 
+        // ou se o item foi adicionado manualmente (pedido = 0), atualizamos o totalQty para refletir a venda real.
+        // Caso contrário, mantemos o totalQty original (pedido original).
+        // Se você quiser que o valor SEMPRE reflita o que foi separado, use: const finalQty = pickedQty;
+        // Se quiser manter o histórico do pedido original se separou menos: const finalQty = Math.max(item.totalQty, pickedQty);
+        
+        // Opção: Vamos assumir que "Valor Atualizado" significa valor do que está saindo (Separado).
+        // Se o item foi adicionado na hora (totalQty 0), ele assume pickedQty.
+        // Se era um item pedido (10) e separou (10), tudo certo.
+        // Se era pedido (10) e separou (5), o valor do pedido deve cair? Geralmente sim, pois é o que vai ser faturado.
+        
+        // Vamos atualizar o totalQty para ser o maior valor entre (Original vs Separado) para garantir que não percamos a info do pedido original visualmente, 
+        // MAS para cálculo financeiro, usaremos o que foi efetivamente separado/validado se houver separação, 
+        // ou o totalQty se não houver separação ainda.
+        
+        // Lógica Simplificada para Gestão: O que vale é o que foi separado (picked).
+        // Se pickedQty > 0, usamos ele para o cálculo financeiro.
+        // Se pickedQty == 0, assumimos que nada foi separado ainda, então usamos totalQty (pedido original) para o valor.
+        
+        // Para itens adicionados manualmente (Ref extra), totalQty inicial é 0. Então pickedQty define o valor.
+        
+        let quantityForCalc = item.totalQty;
+        
+        // Se houver separação iniciada para este item ou se for item novo
+        if (pickedQty > 0 || item.totalQty === 0) {
+             quantityForCalc = pickedQty;
+             // Atualiza a propriedade totalQty do item para refletir a realidade do que está sendo levado,
+             // caso seja um item novo ou quantidade maior.
+             if (pickedQty > item.totalQty) {
+                 item.totalQty = pickedQty;
+             }
+        }
+
+        const itemValue = quantityForCalc * item.unitPrice;
+        
+        newTotalPieces += quantityForCalc;
+        newSubtotalValue += itemValue;
+
+        return {
+            ...item,
+            totalItemValue: itemValue 
+        };
+    });
+
+    // 3. Recalcula Desconto
+    let discountAmount = 0;
+    if (currentOrder.discount_type === 'percentage') {
+        discountAmount = newSubtotalValue * (currentOrder.discount_value / 100);
+    } else if (currentOrder.discount_type === 'fixed') {
+        discountAmount = currentOrder.discount_value;
+    }
+
+    const newFinalValue = Math.max(0, newSubtotalValue - discountAmount);
+
+    // 4. Atualiza o Pedido no Banco
+    const { data: updatedRow, error } = await supabase
+        .from('orders')
+        .update({ 
+            items: processedItems,
+            total_pieces: newTotalPieces,
+            subtotal_value: newSubtotalValue,
+            final_total_value: newFinalValue
+        })
+        .eq('id', orderId)
+        .select()
+        .single();
     
     if (error) throw error;
 
-    // 2. Calcula diferença e atualiza estoque APENAS para produtos LIVRES (enforceStock = false)
+    // 5. Calcula diferença e atualiza estoque APENAS para produtos LIVRES (enforceStock = false)
     const currentProducts = await getProducts();
 
-    // Cria um mapa unificado de todos os produtos envolvidos (Old + New)
     const processedKeys = new Set<string>();
-    
-    // Função auxiliar para criar chave única
     const getKey = (ref: string, color: string) => `${ref}:::${color}`;
 
-    // Mapeia itens antigos
     const oldMap: Record<string, OrderItem> = {};
     oldItems.forEach(i => oldMap[getKey(i.reference, i.color)] = i);
 
-    // Mapeia itens novos
     const newMap: Record<string, OrderItem> = {};
-    newItems.forEach(i => newMap[getKey(i.reference, i.color)] = i);
+    processedItems.forEach(i => newMap[getKey(i.reference, i.color)] = i);
 
-    // Adiciona todas as chaves ao Set para iterar
     Object.keys(oldMap).forEach(k => processedKeys.add(k));
     Object.keys(newMap).forEach(k => processedKeys.add(k));
 
     for (const key of processedKeys) {
         const [ref, color] = key.split(':::');
-        
         const oldItem = oldMap[key];
         const newItem = newMap[key];
-
         const product = currentProducts.find(p => p.reference === ref && p.color === color);
 
-        // Só mexe no estoque se o produto for LIVRE (enforceStock == false)
-        // Produtos travados já tiveram baixa na criação do pedido (ou deveriam ter)
         if (product && !product.enforceStock) {
             let stockChanged = false;
             const newStock = { ...product.stock };
-            
-            // Pega o picked antigo (0 se o item não existia antes)
             const oldPicked = oldItem?.picked || {};
-            // Pega o picked novo (0 se o item foi deletado)
             const newPicked = newItem?.picked || {};
-
             const allSizes = new Set([...Object.keys(oldPicked), ...Object.keys(newPicked)]);
 
             allSizes.forEach(size => {
                 const qOld = oldPicked[size] || 0;
                 const qNew = newPicked[size] || 0;
-                
                 const delta = qNew - qOld; 
-                // Se delta positivo: separou mais -> baixa estoque
-                // Se delta negativo: devolveu/cancelou -> sobe estoque
 
                 if (delta !== 0) {
                     const currentStockQty = newStock[size] || 0;
@@ -199,6 +262,32 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
             }
         }
     }
+
+    // Retorna o objeto Order formatado corretamente (camelCase)
+    let itemsList = updatedRow.items;
+    if (itemsList && !Array.isArray(itemsList) && itemsList.list) itemsList = itemsList.list;
+
+    return {
+      ...updatedRow,
+      id: updatedRow.id,
+      displayId: updatedRow.display_id,
+      repId: updatedRow.rep_id,
+      repName: updatedRow.rep_name,
+      clientId: updatedRow.client_id,
+      clientName: updatedRow.client_name,
+      clientCity: updatedRow.client_city,
+      clientState: updatedRow.client_state,
+      createdAt: updatedRow.created_at,
+      deliveryDate: updatedRow.delivery_date,
+      paymentMethod: updatedRow.payment_method,
+      status: updatedRow.status,
+      items: Array.isArray(itemsList) ? itemsList : [], 
+      totalPieces: updatedRow.total_pieces,
+      subtotalValue: updatedRow.subtotal_value,
+      discountType: updatedRow.discount_type,
+      discountValue: updatedRow.discount_value,
+      finalTotalValue: updatedRow.final_total_value
+    } as Order;
 };
 
 
