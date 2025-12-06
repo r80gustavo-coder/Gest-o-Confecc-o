@@ -42,18 +42,17 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
 
     const itemsHtml = order.items.map(item => {
         // CÁLCULO DINÂMICO DO TOTAL DA LINHA
-        // Lógica Atualizada: Se tem Romaneio (Finalizado) E houve separação, usa estritamente o separado.
+        // Lógica Atualizada: Se tem Romaneio (Finalizado), usa estritamente o separado.
         // Se não tem romaneio, mantém lógica híbrida (Separado > Pedido).
         
-        const hasPickingData = item.picked && Object.values(item.picked).some(v => v > 0);
-        const useStrictPicking = !!order.romaneio && hasPickingData;
+        const useStrictPicking = !!order.romaneio;
 
         let rowTotal = 0;
         const cellsHtml = ALL_SIZES.map(s => {
             let numVal = 0;
             
             if (useStrictPicking) {
-                // Se finalizado, usa apenas o separado (mesmo que seja 0, se o item existe na lista)
+                // Se finalizado, usa apenas o separado. Se não houver dados, é 0.
                 numVal = item.picked ? (item.picked[s] || 0) : 0;
             } else {
                 // Se aberto/processando, usa separado se houver, senão usa o pedido
@@ -64,6 +63,11 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
             rowTotal += numVal;
             return `<td class="text-center">${numVal > 0 ? numVal : '-'}</td>`;
         }).join('');
+
+        // SE O PEDIDO ESTÁ FINALIZADO E A QUANTIDADE DESTA LINHA É 0, NÃO EXIBE NO PDF
+        if (useStrictPicking && rowTotal === 0) {
+            return '';
+        }
 
         calculatedTotalPieces += rowTotal;
         const rowValue = rowTotal * item.unitPrice;

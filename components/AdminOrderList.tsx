@@ -1,4 +1,4 @@
-// ... existing imports
+
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef, SIZE_GRIDS, User, Role } from '../types';
 import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers } from '../services/storageService';
@@ -274,8 +274,8 @@ const AdminOrderList: React.FC = () => {
               ]);
 
               for (const size of allSizes) {
-                  const qNewPicked = item.picked?.[size] || 0;
-                  const qNewOrdered = item.sizes?.[size] || 0; // Quantidade pedida atual (pode ter sido editada)
+                  const qNewPicked = (item.picked?.[size] as number) || 0;
+                  const qNewOrdered = (item.sizes?.[size] as number) || 0; // Quantidade pedida atual (pode ter sido editada)
                   
                   // Valores antigos/originais
                   const qOldOrdered = originalItemSnapshot?.sizes?.[size] || 0;
@@ -288,7 +288,7 @@ const AdminOrderList: React.FC = () => {
                   const stockNeeded = newConsumption - prevConsumption;
 
                   if (stockNeeded > 0) {
-                      const currentStock = product.stock[size] || 0;
+                      const currentStock = (product.stock[size] as number) || 0;
                       if (stockNeeded > currentStock) {
                           alert(`BLOQUEADO: Estoque insuficiente para ${item.reference} - ${item.color} (Tam: ${size}).\n\nVocê precisa de mais ${stockNeeded} peça(s), mas só existem ${currentStock} disponíveis.`);
                           setSavingPicking(false);
@@ -749,16 +749,18 @@ const AdminOrderList: React.FC = () => {
                             <tbody>
                                 {order.items.map((item, idx) => {
                                     // CÁLCULO DINÂMICO PARA O PDF
-                                    // Se tem Romaneio E tem picking salvo, usa APENAS o que foi separado.
-                                    const hasPickingData = item.picked && Object.values(item.picked).some(v => v > 0);
-                                    const useStrictPicking = !!order.romaneio && hasPickingData;
+                                    // Se tem Romaneio, usa ESTRITAMENTE o que foi separado.
+                                    // Se o Romaneio existir, assumimos que a fase de separação acabou.
+                                    const useStrictPicking = !!order.romaneio;
 
                                     let displayRowTotal = 0;
                                     const cells = ALL_SIZES.map(s => {
                                         let numVal = 0;
                                         if (useStrictPicking) {
-                                            numVal = item.picked ? (item.picked[s] || 0) : 0;
+                                            // Se finalizado, usa apenas o 'picked'. Se não houver picked, é 0.
+                                            numVal = item.picked ? (item.picked[s] as number || 0) : 0;
                                         } else {
+                                            // Se aberto, usa híbrido (picked se existir, senão ordered)
                                             const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
                                             numVal = typeof val === 'number' ? val : 0;
                                         }
@@ -766,6 +768,12 @@ const AdminOrderList: React.FC = () => {
                                         displayRowTotal += numVal;
                                         return numVal;
                                     });
+
+                                    // Se o pedido está finalizado (tem Romaneio) e o total separado deste item for 0,
+                                    // NÃO exibe a linha no PDF.
+                                    if (useStrictPicking && displayRowTotal === 0) {
+                                        return null;
+                                    }
 
                                     // Acumula totais globais do pedido baseados na visualização
                                     calculatedTotalPieces += displayRowTotal;
