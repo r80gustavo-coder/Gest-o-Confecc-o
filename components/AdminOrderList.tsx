@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { Order, OrderItem } from '../types';
-import { getOrders, updateOrderStatus, saveOrderPicking } from '../services/storageService';
-import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save } from 'lucide-react';
+import { Order, OrderItem, ProductDef } from '../types';
+import { getOrders, updateOrderStatus, saveOrderPicking, getProducts } from '../services/storageService';
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const AdminOrderList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [products, setProducts] = useState<ProductDef[]>([]); // Carregar produtos para saber quem é Travado/Livre
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   
@@ -23,15 +24,21 @@ const AdminOrderList: React.FC = () => {
   const [pickingItems, setPickingItems] = useState<OrderItem[]>([]);
   const [savingPicking, setSavingPicking] = useState(false);
 
-  const fetchOrders = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const data = await getOrders();
-    setOrders(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    // Busca pedidos e produtos em paralelo
+    const [ordersData, productsData] = await Promise.all([
+        getOrders(),
+        getProducts()
+    ]);
+    
+    setOrders(ordersData.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    setProducts(productsData);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchData();
   }, []);
 
   const toggleSelect = (id: string) => {
@@ -75,8 +82,6 @@ const AdminOrderList: React.FC = () => {
       
       // Validação simples: não pode ser negativo
       if (!isNaN(num) && num >= 0) {
-          // Opcional: Validar se é maior que o pedido? O usuário pode querer separar a mais por erro, vamos permitir mas avisar visualmente talvez.
-          // Por enquanto, livre.
           newItems[itemIdx].picked![size] = num;
       } else if (val === '') {
           delete newItems[itemIdx].picked![size];
@@ -468,7 +473,7 @@ const AdminOrderList: React.FC = () => {
                                 <PackageOpen className="w-6 h-6 mr-2" /> Separação de Pedido #{pickingOrder.displayId}
                             </h2>
                             <p className="text-xs text-orange-700 mt-1">
-                                Digite a quantidade separada. A baixa de estoque ocorre ao salvar.
+                                Digite a quantidade separada e clique em salvar para confirmar.
                             </p>
                         </div>
                         <button onClick={() => setPickingOrder(null)} className="p-2 hover:bg-orange-100 rounded-full">
@@ -481,15 +486,40 @@ const AdminOrderList: React.FC = () => {
                             <thead>
                                 <tr className="bg-gray-100 text-gray-700">
                                     <th className="p-3 text-left">Produto</th>
+                                    <th className="p-3 text-left">Controle de Estoque</th>
                                     <th className="p-3 text-center">Tamanhos</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {pickingItems.map((item, idx) => (
+                                {pickingItems.map((item, idx) => {
+                                    // Procura o produto original para verificar se é Travado ou Livre
+                                    const product = products.find(p => p.reference === item.reference && p.color === item.color);
+                                    const isLocked = product?.enforceStock;
+                                    
+                                    return (
                                     <tr key={idx}>
-                                        <td className="p-3">
+                                        <td className="p-3 align-top">
                                             <p className="font-bold text-gray-800">{item.reference}</p>
                                             <p className="text-xs uppercase text-gray-500">{item.color}</p>
+                                        </td>
+                                        <td className="p-3 align-top">
+                                            {isLocked ? (
+                                                <div className="flex items-start text-xs text-red-600 bg-red-50 p-2 rounded border border-red-100">
+                                                    <Lock className="w-4 h-4 mr-1 flex-shrink-0" />
+                                                    <div>
+                                                        <span className="font-bold block">Estoque Travado</span>
+                                                        <span>Já baixado no pedido.</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-start text-xs text-green-600 bg-green-50 p-2 rounded border border-green-100">
+                                                    <Unlock className="w-4 h-4 mr-1 flex-shrink-0" />
+                                                    <div>
+                                                        <span className="font-bold block">Estoque Livre</span>
+                                                        <span>Baixará ao salvar aqui.</span>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-3">
                                             <div className="flex flex-wrap gap-4 justify-center">
@@ -520,7 +550,7 @@ const AdminOrderList: React.FC = () => {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                )})}
                             </tbody>
                         </table>
                     </div>
