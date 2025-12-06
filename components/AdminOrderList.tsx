@@ -1528,12 +1528,12 @@ const AdminOrderList: React.FC = () => {
                         {ALL_SIZES.map(s => {
                             const colTotal = aggregatedItems.reduce<number>((acc, i) => {
                                 const qty = i.sizes[s];
-                                return acc + (typeof qty === 'number' ? qty : 0);
+                                return acc + (Number(qty) || 0);
                             }, 0);
                             return <td key={s} className="border p-3 text-center">{colTotal || ''}</td>
                         })}
                         <td className="border p-3 text-right text-xl">
-                            {aggregatedItems.reduce<number>((acc, i) => acc + (i.totalQty || 0), 0)}
+                            {aggregatedItems.reduce<number>((acc, i) => acc + (Number(i.totalQty) || 0), 0)}
                         </td>
                     </tr>
                 </tfoot>

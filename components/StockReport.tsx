@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProductDef, SizeGridType, SIZE_GRIDS } from '../types';
 import { getProducts } from '../services/storageService';
-import { Loader2, Search, Printer, Package, DollarSign, Archive, Filter } from 'lucide-react';
+import { Loader2, Search, Printer, Package, DollarSign, Archive, Filter, Info } from 'lucide-react';
 
 const StockReport: React.FC = () => {
   const [products, setProducts] = useState<ProductDef[]>([]);
@@ -31,17 +31,25 @@ const StockReport: React.FC = () => {
   let totalStockValue = 0;
 
   const processedData = filteredProducts.map(p => {
-    // Soma a quantidade de todas as variações de tamanho
-    const qty = (Object.values(p.stock) as number[]).reduce((acc, curr) => acc + curr, 0);
-    const value = qty * (p.basePrice || 0);
+    const stockValues = Object.values(p.stock) as number[];
+    
+    // Qtd Líquida (Exibição na Tabela - mostra realidade)
+    const netQty = stockValues.reduce((acc, curr) => acc + curr, 0);
+    
+    // Qtd Física/Positiva (Cálculo de Ativos - ignora negativos)
+    const positiveQty = stockValues.reduce((acc, curr) => acc + (curr > 0 ? curr : 0), 0);
+    
+    const basePrice = p.basePrice || 0;
+    const valueOfPositive = positiveQty * basePrice;
 
-    totalStockQty += qty;
-    totalStockValue += value;
+    // Acumula APENAS os positivos nos totais gerais
+    totalStockQty += positiveQty;
+    totalStockValue += valueOfPositive;
 
     return {
       ...p,
-      totalQty: qty,
-      totalValue: value
+      totalQty: netQty,
+      totalValue: netQty * basePrice // Valor da linha mantém a lógica líquida
     };
   });
 
@@ -60,7 +68,7 @@ const StockReport: React.FC = () => {
             <h2 className="text-2xl font-bold text-gray-900 flex items-center">
               <Archive className="w-6 h-6 mr-2 text-blue-600" /> Relatório de Estoque Valorizado
             </h2>
-            <p className="text-gray-500 text-sm mt-1">Visão geral quantitativa e financeira dos produtos armazenados.</p>
+            <p className="text-gray-500 text-sm mt-1">Visão geral quantitativa e financeira. Totais consideram apenas estoque físico (positivo).</p>
           </div>
           <button 
             onClick={handlePrint}
@@ -104,7 +112,7 @@ const StockReport: React.FC = () => {
                <Package className="w-6 h-6" />
            </div>
            <div>
-               <p className="text-xs font-bold text-gray-500 uppercase">Peças em Estoque</p>
+               <p className="text-xs font-bold text-gray-500 uppercase">Peças em Estoque (Positivo)</p>
                <p className="text-2xl font-bold text-gray-900">{totalStockQty}</p>
            </div>
        </div>
@@ -114,7 +122,7 @@ const StockReport: React.FC = () => {
                <DollarSign className="w-6 h-6" />
            </div>
            <div>
-               <p className="text-xs font-bold text-gray-500 uppercase">Valor Total (Custo)</p>
+               <p className="text-xs font-bold text-gray-500 uppercase">Valor Ativo (Custo)</p>
                <p className="text-2xl font-bold text-gray-900">R$ {totalStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
            </div>
        </div>
@@ -141,8 +149,8 @@ const StockReport: React.FC = () => {
                          <th className="p-4">Cor</th>
                          <th className="p-4 text-center">Detalhamento Grade</th>
                          <th className="p-4 text-right">Custo Unit.</th>
-                         <th className="p-4 text-right">Qtd Total</th>
-                         <th className="p-4 text-right">Valor Total</th>
+                         <th className="p-4 text-right">Qtd Líquida</th>
+                         <th className="p-4 text-right">Valor Líquido</th>
                      </tr>
                  </thead>
                  <tbody className="divide-y divide-gray-100">
@@ -183,7 +191,10 @@ const StockReport: React.FC = () => {
                  </tbody>
                  <tfoot className="bg-gray-100 font-bold border-t border-gray-300">
                      <tr>
-                         <td colSpan={4} className="p-4 text-right uppercase text-gray-600">Totais Gerais</td>
+                         <td colSpan={4} className="p-4 text-right uppercase text-gray-600 flex items-center justify-end">
+                            <Info className="w-4 h-4 mr-2" />
+                            Totais Gerais (Apenas Positivos)
+                         </td>
                          <td className="p-4 text-right text-lg text-blue-800">{totalStockQty}</td>
                          <td className="p-4 text-right text-lg text-green-800">R$ {totalStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                      </tr>
