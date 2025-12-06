@@ -29,9 +29,10 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
       
       setProducts(prods);
       
+      // Normaliza as chaves para maiúsculo e remove espaços
       const priceMap: Record<string, number> = {};
       existingPrices.forEach(p => {
-        priceMap[p.reference] = p.price;
+        priceMap[p.reference.trim().toUpperCase()] = p.price;
       });
       setPrices(priceMap);
     } catch (error) {
@@ -52,17 +53,18 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
     const num = parseFloat(val);
     setPrices(prev => ({
       ...prev,
-      [ref]: isNaN(num) ? 0 : num
+      [ref.trim().toUpperCase()]: isNaN(num) ? 0 : num
     }));
   };
 
   const savePrice = async (ref: string) => {
     setSavingRef(ref);
     try {
-      const price = prices[ref] || 0;
+      const normalizedRef = ref.trim().toUpperCase();
+      const price = prices[normalizedRef] || 0;
       await upsertRepPrice({
         repId: user.id,
-        reference: ref,
+        reference: normalizedRef,
         price: price
       });
       // Pequeno delay visual para feedback
@@ -119,7 +121,9 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredRefs.map(ref => (
+              {filteredRefs.map(ref => {
+                const normRef = ref.trim().toUpperCase();
+                return (
                 <tr key={ref} className="hover:bg-gray-50">
                   <td className="p-4 font-bold text-gray-800">{ref}</td>
                   <td className="p-4">
@@ -130,20 +134,20 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
                         step="0.01"
                         min="0"
                         className="w-full pl-8 pr-3 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700"
-                        value={prices[ref] || ''}
-                        onChange={(e) => handlePriceChange(ref, e.target.value)}
-                        onBlur={() => savePrice(ref)} 
+                        value={prices[normRef] || ''}
+                        onChange={(e) => handlePriceChange(normRef, e.target.value)}
+                        onBlur={() => savePrice(normRef)} 
                         placeholder="0.00"
                       />
                     </div>
                   </td>
                   <td className="p-4 text-center">
                     <button 
-                      onClick={() => savePrice(ref)}
-                      className={`p-2 rounded-full transition ${savingRef === ref ? 'text-green-600 bg-green-50' : 'text-blue-600 hover:bg-blue-100'}`}
+                      onClick={() => savePrice(normRef)}
+                      className={`p-2 rounded-full transition ${savingRef === normRef ? 'text-green-600 bg-green-50' : 'text-blue-600 hover:bg-blue-100'}`}
                       title="Salvar Preço"
                     >
-                      {savingRef === ref ? (
+                      {savingRef === normRef ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
                         <Save className="w-5 h-5" />
@@ -151,7 +155,7 @@ const RepPriceManager: React.FC<Props> = ({ user }) => {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )})}
               {filteredRefs.length === 0 && (
                 <tr>
                   <td colSpan={3} className="p-12 text-center text-gray-500">

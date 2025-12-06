@@ -20,7 +20,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
-  const [romaneio, setRomaneio] = useState(''); // Novo state para Romaneio
+  const [romaneio, setRomaneio] = useState(''); 
   
   // Descontos
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed' | ''>('');
@@ -30,7 +30,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [currentRef, setCurrentRef] = useState('');
   const [currentColor, setCurrentColor] = useState('');
   const [currentGrid, setCurrentGrid] = useState<SizeGridType>(SizeGridType.ADULT);
-  const [manualUnitPrice, setManualUnitPrice] = useState<string>(''); // Preço editável
+  const [manualUnitPrice, setManualUnitPrice] = useState<string>(''); 
   
   // Dados do produto selecionado (para validação de estoque)
   const [selectedProductData, setSelectedProductData] = useState<ProductDef | null>(null);
@@ -58,11 +58,11 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
           setClients(c);
           
           // Mapeia preços para busca rápida
-          // Normaliza a chave para Uppercase para garantir o match com o input do usuário
+          // Normaliza a chave para Uppercase e Trim para garantir o match perfeito
           const pm: Record<string, number> = {};
           prices.forEach(pr => {
               if (pr.reference) {
-                  pm[pr.reference.toUpperCase()] = pr.price;
+                  pm[pr.reference.trim().toUpperCase()] = pr.price;
               }
           });
           setPriceMap(pm);
@@ -78,25 +78,29 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   // Quando a referência muda, busca cores e PREÇO da tabela
   useEffect(() => {
     if (currentRef) {
+      const searchRef = currentRef.trim().toUpperCase();
+
       const colors = products
-        .filter(p => p.reference === currentRef)
+        .filter(p => p.reference === searchRef)
         .map(p => p.color);
       setAvailableColors([...new Set(colors)]);
       
       // Tenta encontrar o produto para setar o grid corretamente se não estivermos editando
       if (editingIndex === null) {
-        const prod = products.find(p => p.reference === currentRef);
+        const prod = products.find(p => p.reference === searchRef);
         if (prod) setCurrentGrid(prod.gridType);
         
-        // AUTO-PREENCHIMENTO DO PREÇO (PRIORIDADE TOTAL À TABELA DO REP)
-        // O currentRef já está em UpperCase devido ao onChange do input.
-        const configPrice = priceMap[currentRef];
+        // --- LÓGICA DE PREÇO UNITÁRIO ---
+        // Busca EXCLUSIVAMENTE na tabela de preços do representante (priceMap).
+        // O valor base (prod.basePrice) é IGNORADO aqui para evitar confusão.
         
-        if (configPrice !== undefined && configPrice > 0) {
-            setManualUnitPrice(configPrice.toFixed(2));
+        const repPrice = priceMap[searchRef];
+        
+        if (repPrice !== undefined && repPrice > 0) {
+            setManualUnitPrice(repPrice.toFixed(2));
         } else {
-            // Se não houver preço configurado pelo Representante, deixa em branco.
-            // NÃO usa o preço base (custo) do administrador.
+            // Se não houver preço configurado pelo Representante, o campo fica em branco
+            // para forçar a digitação, garantindo que não se use um valor "padrão" errado.
             setManualUnitPrice('');
         }
       }
@@ -109,7 +113,9 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   // Atualiza o produto selecionado completo para acessar o ESTOQUE
   useEffect(() => {
       if (currentRef && currentColor) {
-          const prod = products.find(p => p.reference === currentRef && p.color === currentColor);
+          const searchRef = currentRef.trim().toUpperCase();
+          const searchColor = currentColor.trim().toUpperCase();
+          const prod = products.find(p => p.reference === searchRef && p.color === searchColor);
           setSelectedProductData(prod || null);
       } else {
           setSelectedProductData(null);
@@ -155,8 +161,8 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     const finalUnitPrice = parseFloat(manualUnitPrice) || 0;
 
     const newItem: OrderItem = {
-      reference: currentRef,
-      color: currentColor,
+      reference: currentRef.toUpperCase().trim(),
+      color: currentColor.toUpperCase().trim(),
       gridType: currentGrid,
       sizes: sizesNum,
       totalQty: total,
@@ -252,7 +258,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             createdAt: new Date().toISOString(),
             deliveryDate,
             paymentMethod,
-            romaneio: romaneio, // Passa o romaneio para a função
+            romaneio: romaneio, 
             status: 'open',
             items,
             totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0),
