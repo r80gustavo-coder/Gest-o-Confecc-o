@@ -57,31 +57,21 @@ const AdminReports: React.FC = () => {
   // Get Selected Rep Name for Printing
   const selectedRepName = selectedRepId ? reps.find(r => r.id === selectedRepId)?.name : '';
 
-  // --- LÓGICA DE QUANTIDADE HÍBRIDA ---
-  // Se o pedido tem Romaneio (Finalizado) -> Usa a quantidade SEPARADA (Real)
-  // Se o pedido está Aberto -> Usa a quantidade PEDIDA (Projeção)
+  // --- LÓGICA DE QUANTIDADE ---
   const getRelevantQty = (item: OrderItem, order: Order, size?: string): number => {
-      const isFinalized = !!order.romaneio;
-      
-      if (size) {
-          // Retorna quantidade de um tamanho específico
-          if (isFinalized) {
-              return item.picked ? (item.picked[size] || 0) : 0;
-          } else {
-              // Se tiver picked parcial, usa picked, senão usa sizes (pedido)
-              const picked = item.picked?.[size];
-              return picked !== undefined ? picked : (item.sizes?.[size] || 0);
-          }
-      } else {
-          // Retorna quantidade total do item
-          if (isFinalized) {
-              // Soma do que foi bipado
-              return item.picked ? (Object.values(item.picked) as number[]).reduce((a, b) => a + b, 0) : 0;
-          } else {
-              // Usa o totalQty do pedido (Projeção)
-              return item.totalQty;
-          }
+      // SE O PEDIDO JÁ TEM ROMANEIO (Finalizado ou Parcial):
+      // A fonte da verdade é o campo 'sizes', pois o processo de finalização consolida o que foi separado dentro dele.
+      if (order.romaneio) {
+          if (size) return item.sizes[size] || 0;
+          // Retorna a soma dos tamanhos em 'sizes'
+          return (Object.values(item.sizes) as number[]).reduce((a, b) => a + b, 0);
       }
+      
+      // SE O PEDIDO ESTÁ ABERTO (A Romanear):
+      // Usa a projeção do pedido original (sizes)
+      // (Opcionalmente poderia usar 'picked' se quisesse ver o progresso, mas para relatório de produção futura usa-se o pedido)
+      if (size) return item.sizes[size] || 0;
+      return item.totalQty;
   };
 
   // --- AGGREGATIONS ---

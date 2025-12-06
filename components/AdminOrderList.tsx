@@ -352,8 +352,8 @@ const AdminOrderList: React.FC = () => {
       setSavingPicking(true);
 
       try {
-          // 1. Calcular itens para o NOVO Pedido (Só o que foi separado)
-          // 2. Calcular itens restantes para o PEDIDO ATUAL (Original - Separado)
+          // 1. Calcular itens para o Pedido de ENTREGA (O que foi separado/bipado)
+          // 2. Calcular itens para o Pedido de SALDO (O que faltou)
 
           const deliveryItems: OrderItem[] = [];
           const remainingItems: OrderItem[] = [];
@@ -361,17 +361,13 @@ const AdminOrderList: React.FC = () => {
 
           pickingItems.forEach(item => {
                // --- CORREÇÃO DE PREÇO GARANTIDA ---
-               // Garante que o preço unitário seja buscado da tabela do representante ou do cadastro
-               // mesmo que o item de separação esteja com preço 0.
                let unitPriceToUse = item.unitPrice;
 
                if (!unitPriceToUse || unitPriceToUse === 0) {
                    const normalizedRef = item.reference.trim().toUpperCase();
-                   // 1. Tenta Tabela do Representante (Prioridade)
                    if (currentRepPriceMap[normalizedRef] !== undefined && currentRepPriceMap[normalizedRef] > 0) {
                        unitPriceToUse = currentRepPriceMap[normalizedRef];
                    } else {
-                       // 2. Tenta Preço Base do Produto no catálogo
                        const prod = products.find(p => p.reference === item.reference && p.color === item.color);
                        if (prod && prod.basePrice) {
                            unitPriceToUse = prod.basePrice;
@@ -379,10 +375,9 @@ const AdminOrderList: React.FC = () => {
                    }
                }
 
-               // Clone para garantir - usando o preço corrigido
                const deliveryItem: OrderItem = { 
                    ...item, 
-                   unitPrice: unitPriceToUse, // Aplica preço corrigido aqui
+                   unitPrice: unitPriceToUse,
                    sizes: {}, 
                    picked: undefined, 
                    totalQty: 0, 
@@ -391,7 +386,7 @@ const AdminOrderList: React.FC = () => {
                
                const remainingItem: OrderItem = { 
                    ...item, 
-                   unitPrice: unitPriceToUse, // Aplica também ao restante para consistência
+                   unitPrice: unitPriceToUse,
                    sizes: {}, 
                    picked: {}, 
                    totalQty: 0, 
@@ -401,21 +396,20 @@ const AdminOrderList: React.FC = () => {
                let itemHasDelivery = false;
                let itemHasRemaining = false;
 
-               // Une todos os tamanhos possíveis
                const allSizes = new Set([...Object.keys(item.sizes), ...Object.keys(item.picked || {})]);
 
                allSizes.forEach(size => {
                    const ordered = (item.sizes[size] as number) || 0;
                    const picked = (item.picked?.[size] as number) || 0;
                    
-                   // Lógica para o novo pedido (Entrega)
+                   // ENTREGA: Usa o 'picked'
                    if (picked > 0) {
                        deliveryItem.sizes[size] = picked;
                        itemHasDelivery = true;
                        totalPickedCount += picked;
                    }
 
-                   // Lógica para o pedido remanescente (Saldo)
+                   // SALDO: Diferença
                    const balance = Math.max(0, ordered - picked);
                    if (balance > 0) {
                        remainingItem.sizes[size] = balance;
@@ -423,7 +417,6 @@ const AdminOrderList: React.FC = () => {
                    }
                });
 
-               // Recalcula totais com o preço corrigido
                if (itemHasDelivery) {
                     deliveryItem.totalQty = Object.values(deliveryItem.sizes).reduce((a, b) => a + (b as number), 0);
                     deliveryItem.totalItemValue = deliveryItem.totalQty * deliveryItem.unitPrice;
@@ -438,25 +431,38 @@ const AdminOrderList: React.FC = () => {
           });
 
           if (totalPickedCount === 0) {
-              alert("Nenhum item foi bipado/separado para gerar entrega parcial.");
+              alert("Nenhum item foi bipado/separado para gerar entrega.");
               setSavingPicking(false);
               return;
           }
 
-          const deliverySubtotal = deliveryItems.reduce((acc, i) => acc + i.totalItemValue, 0);
-          
-          // Calcula desconto proporcional para o pedido parcial
-          let deliveryDiscount = 0;
-          if (pickingOrder.discountType === 'percentage') {
-              deliveryDiscount = deliverySubtotal * (pickingOrder.discountValue / 100);
-          } else if (pickingOrder.discountType === 'fixed') {
-               // Regra de três simples para desconto fixo proporcional
-               const originalSubtotal = pickingOrder.subtotalValue || 1; 
-               const ratio = deliverySubtotal / originalSubtotal;
-               deliveryDiscount = pickingOrder.discountValue * ratio;
+          // VERIFICA SE É UMA ENTREGA COMPLETA (Nada restou)
+          // Se não houver itens restantes, APENAS finaliza o pedido atual (sem criar novo).
+          if (remainingItems.length === 0) {
+              // Chama a lógica de finalizar e cancelar (que na prática ajusta o pedido para o que foi bipado)
+              // Como bipou TUDO, não haverá cancelamento real, apenas ajuste de structure (picked -> sizes)
+              await handleFinalizeWithCancel(); 
+              return;
           }
 
-          const deliveryOrderPayload = {
+          // SE SOBROU SALDO:
+          // 1. Criar NOVO pedido com o SALDO (Remaining)
+          // 2. Atualizar o pedido ATUAL para conter apenas a ENTREGA (Delivery) + Romaneio
+
+          // --- CRIAR PEDIDO DE SALDO (BACKLOG) ---
+          const backlogSubtotal = remainingItems.reduce((acc, i) => acc + i.totalItemValue, 0);
+          
+          let backlogDiscount = 0;
+          if (pickingOrder.discountType === 'percentage') {
+              backlogDiscount = backlogSubtotal * (pickingOrder.discountValue / 100);
+          } else if (pickingOrder.discountType === 'fixed') {
+               // Proporcional
+               const originalSubtotal = pickingOrder.subtotalValue || 1; 
+               const ratio = backlogSubtotal / originalSubtotal;
+               backlogDiscount = pickingOrder.discountValue * ratio;
+          }
+
+          const backlogOrderPayload = {
               id: generateUUID(),
               repId: pickingOrder.repId,
               repName: pickingOrder.repName,
@@ -464,30 +470,39 @@ const AdminOrderList: React.FC = () => {
               clientName: pickingOrder.clientName,
               clientCity: pickingOrder.clientCity,
               clientState: pickingOrder.clientState,
-              createdAt: new Date().toISOString(), // Data da entrega parcial
+              createdAt: new Date().toISOString(),
               deliveryDate: pickingOrder.deliveryDate,
               paymentMethod: pickingOrder.paymentMethod,
-              romaneio: inputRomaneio, 
-              isPartial: true, // FLAG DE ENTREGA PARCIAL
-              status: 'printed' as const, // Já nasce finalizado
-              items: deliveryItems,
-              totalPieces: deliveryItems.reduce((a, i) => a + i.totalQty, 0),
-              subtotalValue: deliverySubtotal,
+              romaneio: null, // Saldo fica aberto
+              status: 'open' as const,
+              isPartial: false, // É um novo pedido aberto
+              items: remainingItems,
+              totalPieces: remainingItems.reduce((a, i) => a + i.totalQty, 0),
+              subtotalValue: backlogSubtotal,
               discountType: pickingOrder.discountType,
-              discountValue: pickingOrder.discountType === 'percentage' ? pickingOrder.discountValue : deliveryDiscount,
-              finalTotalValue: deliverySubtotal - deliveryDiscount
+              discountValue: pickingOrder.discountType === 'percentage' ? pickingOrder.discountValue : backlogDiscount,
+              finalTotalValue: backlogSubtotal - backlogDiscount
           };
 
-          await addOrder(deliveryOrderPayload);
+          await addOrder(backlogOrderPayload);
 
-          // 4. Atualizar o Pedido ORIGINAL (Saldo Aberto)
-          await saveOrderPicking(pickingOrder.id, pickingOrder.items, remainingItems);
+          // --- ATUALIZAR PEDIDO ATUAL (ENTREGA PARCIAL) ---
+          // Agora o pedido atual (#Original) fica com os itens entregues e recebe o Romaneio
+          
+          // Primeiro atualiza itens e estoque
+          await saveOrderPicking(pickingOrder.id, pickingOrder.items, deliveryItems);
+          
+          // Depois define Romaneio e flag Partial
+          await updateOrderRomaneio(pickingOrder.id, inputRomaneio);
+          
+          // Marca flag partial manualmente via update (precisamos fazer isso pois saveOrderPicking não seta flags arbitrárias)
+          await supabase.from('orders').update({ is_partial: true, status: 'printed' }).eq('id', pickingOrder.id);
 
           // Refresh e Fechar
           await fetchData(true);
           setPickingOrder(null);
           setEditingItemIdx(null);
-          alert(`Sucesso! Pedido Parcial Gerado (Romaneio: ${inputRomaneio}). O saldo restante continua aberto no pedido #${pickingOrder.displayId}.`);
+          alert(`Sucesso! Entrega Parcial registrada no pedido #${pickingOrder.displayId} (Romaneio: ${inputRomaneio}). O saldo restante foi movido para um novo pedido.`);
 
       } catch (e: any) {
           alert("Erro na entrega parcial: " + e.message);
@@ -503,7 +518,10 @@ const AdminOrderList: React.FC = () => {
           return;
       }
       
-      if (!confirm("Tem certeza? Isso irá FINALIZAR o pedido com apenas os itens bipados.\nOs itens NÃO bipados serão removidos do pedido (cancelados) e estornados ao estoque.")) {
+      // Se chamado diretamente pelo botão (não pelo fluxo automático de completo), pede confirmação
+      // Se for pelo fluxo automático, podemos pular ou manter para segurança
+      if (!confirm("Confirmar finalização do pedido com os itens selecionados?")) {
+          setSavingPicking(false);
           return;
       }
 
@@ -514,7 +532,7 @@ const AdminOrderList: React.FC = () => {
           const finalItems: OrderItem[] = [];
 
           pickingItems.forEach(item => {
-               // --- CORREÇÃO DE PREÇO (IGUAL À PARCIAL) ---
+               // --- CORREÇÃO DE PREÇO ---
                let unitPriceToUse = item.unitPrice;
                if (!unitPriceToUse || unitPriceToUse === 0) {
                    const normalizedRef = item.reference.trim().toUpperCase();
@@ -559,11 +577,14 @@ const AdminOrderList: React.FC = () => {
 
           // 2. Define Romaneio
           await updateOrderRomaneio(pickingOrder.id, inputRomaneio);
+          
+          // 3. Garante status printed
+          await updateOrderStatus(pickingOrder.id, 'printed');
 
           await fetchData(true);
           setPickingOrder(null);
           setEditingItemIdx(null);
-          alert("Pedido finalizado e saldo restante cancelado com sucesso!");
+          alert("Pedido finalizado com sucesso!");
 
       } catch (e: any) {
           alert("Erro ao finalizar: " + e.message);
@@ -631,7 +652,8 @@ const AdminOrderList: React.FC = () => {
         } else {
           aggregation[key].totalQty += item.totalQty;
           Object.entries(item.sizes).forEach(([size, qty]) => {
-            aggregation[key].sizes[size] = (aggregation[key].sizes[size] || 0) + (qty as number);
+            const current = aggregation[key].sizes[size] || 0;
+            aggregation[key].sizes[size] = current + (qty as number);
           });
         }
       });
@@ -656,7 +678,10 @@ const AdminOrderList: React.FC = () => {
     ALL_SIZES.forEach(s => sizeTotals[s] = 0);
     aggregatedItems.forEach(item => {
         ALL_SIZES.forEach(s => {
-            if (item.sizes[s]) sizeTotals[s] += item.sizes[s];
+            const qty = item.sizes[s];
+            if (typeof qty === 'number') {
+                sizeTotals[s] += qty;
+            }
         });
     });
 
@@ -1503,11 +1528,14 @@ const AdminOrderList: React.FC = () => {
                     <tr>
                         <td colSpan={2} className="border p-3 text-right">TOTAL:</td>
                         {ALL_SIZES.map(s => {
-                            const colTotal = aggregatedItems.reduce((acc: number, i) => acc + (Number(i.sizes[s]) || 0), 0);
+                            const colTotal = aggregatedItems.reduce((acc: number, i: OrderItem) => {
+                                const qty = i.sizes[s];
+                                return acc + (typeof qty === 'number' ? qty : 0);
+                            }, 0);
                             return <td key={s} className="border p-3 text-center">{colTotal || ''}</td>
                         })}
                         <td className="border p-3 text-right text-xl">
-                            {aggregatedItems.reduce((acc: number, i) => acc + (i.totalQty || 0), 0)}
+                            {aggregatedItems.reduce((acc: number, i: OrderItem) => acc + (i.totalQty || 0), 0)}
                         </td>
                     </tr>
                 </tfoot>
