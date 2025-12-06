@@ -127,25 +127,60 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
     setErrorMsg(''); // Limpa erros anteriores
     if (!currentRef || !currentColor) return;
 
-    const sizesNum: {[key: string]: number} = {};
-    let total = 0;
-    let stockError = '';
+    // 1. Processa a entrada atual do formulário
+    const inputSizes: {[key: string]: number} = {};
+    let inputTotal = 0;
 
-    // Validação e Conversão
     Object.entries(quickSizes).forEach(([size, qtyStr]) => {
       const q = parseInt(qtyStr as string);
       if (q > 0) {
-        // Validação de Estoque se a trava estiver ativa
+        inputSizes[size] = q;
+        inputTotal += q;
+      }
+    });
+
+    if (inputTotal === 0) {
+        setErrorMsg('Adicione quantidade em pelo menos um tamanho.');
+        return;
+    }
+
+    // 2. Verifica se este item (Ref + Cor) JÁ EXISTE no pedido
+    // (Apenas se não estivermos no modo de edição direta de uma linha)
+    const duplicateIndex = items.findIndex(item => 
+        item.reference === currentRef.toUpperCase().trim() && 
+        item.color === currentColor.toUpperCase().trim()
+    );
+
+    // 3. Define as quantidades FINAIS (Fusão ou Novo)
+    const finalSizes: {[key: string]: number} = {};
+    
+    if (duplicateIndex !== -1 && editingIndex === null) {
+        // CASO FUSÃO: O item já existe, vamos somar as quantidades
+        const existingItem = items[duplicateIndex];
+        
+        // Copia quantidades existentes
+        Object.assign(finalSizes, existingItem.sizes);
+        
+        // Soma as novas quantidades
+        Object.entries(inputSizes).forEach(([size, qty]) => {
+            finalSizes[size] = (finalSizes[size] || 0) + qty;
+        });
+    } else {
+        // CASO NOVO ou EDITANDO: Usa apenas o input atual
+        Object.assign(finalSizes, inputSizes);
+    }
+
+    // 4. Validação de Estoque (Baseada nas quantidades FINAIS acumuladas)
+    let stockError = '';
+    
+    Object.entries(finalSizes).forEach(([size, totalQtyForSize]) => {
         if (selectedProductData && selectedProductData.enforceStock) {
-            const available = selectedProductData.stock[size] || 0;
-            if (q > available) {
-                stockError = `Sem estoque suficiente para o tamanho ${size} (Disponível: ${available}).`;
+            const availableInStock = selectedProductData.stock[size] || 0;
+            
+            if (totalQtyForSize > availableInStock) {
+                stockError = `Estoque insuficiente para o tamanho ${size}. (Solicitado Total: ${totalQtyForSize}, Disponível: ${availableInStock}).`;
             }
         }
-
-        sizesNum[size] = q;
-        total += q;
-      }
     });
 
     if (stockError) {
@@ -153,39 +188,44 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
         return;
     }
 
-    if (total === 0) {
-        setErrorMsg('Adicione quantidade em pelo menos um tamanho.');
-        return;
-    }
-
+    // 5. Cria o objeto do item atualizado
     const finalUnitPrice = parseFloat(manualUnitPrice) || 0;
+    const finalTotalQty = Object.values(finalSizes).reduce((a, b) => a + b, 0);
 
     const newItem: OrderItem = {
       reference: currentRef.toUpperCase().trim(),
       color: currentColor.toUpperCase().trim(),
       gridType: currentGrid,
-      sizes: sizesNum,
-      totalQty: total,
+      sizes: finalSizes,
+      totalQty: finalTotalQty,
       unitPrice: finalUnitPrice,
-      totalItemValue: total * finalUnitPrice
+      totalItemValue: finalTotalQty * finalUnitPrice
     };
 
+    // 6. Atualiza o Estado (Lista de Itens)
+    const newItemsList = [...items];
+
     if (editingIndex !== null) {
-      const updatedItems = [...items];
-      updatedItems[editingIndex] = newItem;
-      setItems(updatedItems);
-      
-      // Se estava editando, limpa tudo ao terminar
-      setEditingIndex(null);
-      setCurrentRef('');
-      setManualUnitPrice('');
+        // Estava editando: substitui na posição original
+        newItemsList[editingIndex] = newItem;
+        setEditingIndex(null);
+        setCurrentRef(''); // Limpa Ref se terminou edição
+        setManualUnitPrice('');
+    } else if (duplicateIndex !== -1) {
+        // Encontrou duplicata: substitui na posição da duplicata (Fusão)
+        newItemsList[duplicateIndex] = newItem;
+        // Não limpa Ref/Preço para facilitar adição rápida, apenas avisa se quiser
     } else {
-      setItems([...items, newItem]);
+        // Novo item: adiciona ao final
+        newItemsList.push(newItem);
     }
+
+    setItems(newItemsList);
     
-    // Limpa apenas a cor e tamanhos para o próximo item
+    // Limpeza padrão do formulário de entrada
     setQuickSizes({});
     setCurrentColor('');
+    // Mantém a Referência e o Preço para facilitar digitação de várias cores do mesmo modelo
   };
 
   const startEditItem = (index: number) => {

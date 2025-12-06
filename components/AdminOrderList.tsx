@@ -1526,14 +1526,16 @@ const AdminOrderList: React.FC = () => {
                     <tr>
                         <td colSpan={2} className="border p-3 text-right">TOTAL:</td>
                         {ALL_SIZES.map(s => {
-                            const colTotal = aggregatedItems.reduce<number>((acc, i) => {
-                                const qty = i.sizes[s];
-                                return acc + (Number(qty) || 0);
+                            // Fixed: Explicitly typed reduce parameters to avoid arithmetic errors
+                            const colTotal = aggregatedItems.reduce((acc: number, i: OrderItem) => {
+                                const qty = i.sizes[s] || 0;
+                                return acc + qty;
                             }, 0);
                             return <td key={s} className="border p-3 text-center">{colTotal || ''}</td>
                         })}
                         <td className="border p-3 text-right text-xl">
-                            {aggregatedItems.reduce<number>((acc, i) => acc + (Number(i.totalQty) || 0), 0)}
+                            {/* Fixed: Explicitly typed reduce parameters */}
+                            {aggregatedItems.reduce((acc: number, i: OrderItem) => acc + (i.totalQty || 0), 0)}
                         </td>
                     </tr>
                 </tfoot>
