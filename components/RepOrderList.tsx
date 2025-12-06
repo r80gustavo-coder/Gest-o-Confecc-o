@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, Order, Client } from '../types';
-import { getOrders, getClients, updateOrderRomaneio } from '../services/storageService';
-import { Package, Clock, CheckCircle, Search, Eye, X, Loader2, Printer, CheckCheck, Truck, Edit2 } from 'lucide-react';
+import { getOrders, getClients } from '../services/storageService';
+import { Package, Clock, CheckCircle, Search, Eye, X, Loader2, Printer, CheckCheck } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -31,30 +31,6 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
     };
     fetchData();
   }, [user.id]);
-
-  const handleEditRomaneio = async (order: Order) => {
-      const newRomaneio = prompt("Informe o número do Romaneio:", order.romaneio || "");
-      if (newRomaneio !== null) {
-          try {
-              // Atualiza UI otimista
-              const updatedOrders = orders.map(o => o.id === order.id ? { ...o, romaneio: newRomaneio } : o);
-              setOrders(updatedOrders);
-              
-              // Atualiza UI otimista no modal
-              if (viewOrder && viewOrder.id === order.id) {
-                  setViewOrder({ ...viewOrder, romaneio: newRomaneio });
-              }
-
-              // Salva no banco
-              await updateOrderRomaneio(order.id, newRomaneio);
-          } catch (e) {
-              alert("Erro ao salvar Romaneio. Tente novamente.");
-              // Força reload se falhar
-              const o = await getOrders();
-              setOrders(o.filter(o => o.repId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-          }
-      }
-  };
 
   const handlePrint = (order: Order) => {
     const win = window.open('', '', 'height=800,width=900');
@@ -295,14 +271,6 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                             )}
                             
                             <button 
-                                onClick={() => handleEditRomaneio(order)}
-                                className="text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition p-2 rounded-full"
-                                title="Editar Número do Romaneio"
-                            >
-                                <Truck className="w-5 h-5" />
-                            </button>
-
-                            <button 
                                 onClick={() => handlePrint(order)}
                                 className="text-gray-600 hover:bg-gray-100 p-2 rounded-full transition"
                                 title="Imprimir Pedido"
@@ -353,18 +321,9 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 <p className="text-xs text-gray-500 uppercase">Pagamento</p>
                                 <p>{viewOrder.paymentMethod || '-'}</p>
                             </div>
-                            <div className="flex items-center">
-                                <div>
-                                    <p className="text-xs text-gray-500 uppercase">Romaneio</p>
-                                    <p className="font-mono font-bold">{viewOrder.romaneio || '-'}</p>
-                                </div>
-                                <button 
-                                    onClick={() => handleEditRomaneio(viewOrder)}
-                                    className="ml-2 text-blue-600 hover:text-blue-800"
-                                    title="Editar Romaneio"
-                                >
-                                    <Edit2 className="w-4 h-4" />
-                                </button>
+                            <div>
+                                <p className="text-xs text-gray-500 uppercase">Romaneio</p>
+                                <p className="font-mono font-bold">{viewOrder.romaneio || '-'}</p>
                             </div>
                         </div>
 
