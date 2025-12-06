@@ -58,6 +58,7 @@ export interface Order {
   id: string;
   displayId: number; // Sequential ID (Pedido #101)
   romaneio?: string; // Novo campo: Número do Romaneio
+  isPartial?: boolean; // Identifica se é uma entrega parcial
   repId: string;
   repName: string;
   clientId: string;

@@ -295,6 +295,7 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
       id: updatedRow.id,
       displayId: updatedRow.display_id,
       romaneio: updatedRow.romaneio, // Recupera o campo romaneio
+      isPartial: updatedRow.is_partial, // Recupera campo is_partial
       repId: updatedRow.rep_id,
       repName: updatedRow.rep_name,
       clientId: updatedRow.client_id,
@@ -434,6 +435,7 @@ export const getOrders = async (): Promise<Order[]> => {
       id: row.id,
       displayId: row.display_id || row.displayId,
       romaneio: row.romaneio, // Mapeia o campo do banco
+      isPartial: row.is_partial, // Mapeia is_partial
       repId: row.rep_id || row.repId,
       repName: row.rep_name || row.repName,
       clientId: row.client_id || row.clientId,
@@ -505,6 +507,7 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
     id: orderWithSeq.id,
     display_id: orderWithSeq.displayId,
     romaneio: orderWithSeq.romaneio || null, // Salva campo romaneio (pode ser nulo)
+    is_partial: orderWithSeq.isPartial || false, // Salva se é parcial
     rep_id: orderWithSeq.repId,
     rep_name: orderWithSeq.repName,
     client_id: orderWithSeq.clientId,

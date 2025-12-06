@@ -360,29 +360,29 @@ const AdminOrderList: React.FC = () => {
           let totalPickedCount = 0;
 
           pickingItems.forEach(item => {
-               // --- CORREÇÃO DE PREÇO ---
+               // --- CORREÇÃO DE PREÇO GARANTIDA ---
                // Garante que o preço unitário seja buscado da tabela do representante ou do cadastro
-               // caso o item esteja com preço 0 (erro comum em pedidos legados ou se perdidos).
+               // mesmo que o item de separação esteja com preço 0.
                let unitPriceToUse = item.unitPrice;
 
                if (!unitPriceToUse || unitPriceToUse === 0) {
                    const normalizedRef = item.reference.trim().toUpperCase();
                    // 1. Tenta Tabela do Representante (Prioridade)
-                   if (currentRepPriceMap[normalizedRef]) {
+                   if (currentRepPriceMap[normalizedRef] !== undefined && currentRepPriceMap[normalizedRef] > 0) {
                        unitPriceToUse = currentRepPriceMap[normalizedRef];
                    } else {
-                       // 2. Tenta Preço Base do Produto
+                       // 2. Tenta Preço Base do Produto no catálogo
                        const prod = products.find(p => p.reference === item.reference && p.color === item.color);
-                       if (prod) {
-                           unitPriceToUse = prod.basePrice || 0;
+                       if (prod && prod.basePrice) {
+                           unitPriceToUse = prod.basePrice;
                        }
                    }
                }
 
-               // Clone para garantir
+               // Clone para garantir - usando o preço corrigido
                const deliveryItem: OrderItem = { 
                    ...item, 
-                   unitPrice: unitPriceToUse, // Aplica preço corrigido
+                   unitPrice: unitPriceToUse, // Aplica preço corrigido aqui
                    sizes: {}, 
                    picked: undefined, 
                    totalQty: 0, 
@@ -391,7 +391,7 @@ const AdminOrderList: React.FC = () => {
                
                const remainingItem: OrderItem = { 
                    ...item, 
-                   unitPrice: unitPriceToUse, // Aplica preço corrigido
+                   unitPrice: unitPriceToUse, // Aplica também ao restante para consistência
                    sizes: {}, 
                    picked: {}, 
                    totalQty: 0, 
@@ -467,7 +467,8 @@ const AdminOrderList: React.FC = () => {
               createdAt: new Date().toISOString(), // Data da entrega parcial
               deliveryDate: pickingOrder.deliveryDate,
               paymentMethod: pickingOrder.paymentMethod,
-              romaneio: inputRomaneio, // AQUI VAI O ROMANEIO
+              romaneio: inputRomaneio, 
+              isPartial: true, // FLAG DE ENTREGA PARCIAL
               status: 'printed' as const, // Já nasce finalizado
               items: deliveryItems,
               totalPieces: deliveryItems.reduce((a, i) => a + i.totalQty, 0),
@@ -595,7 +596,15 @@ const AdminOrderList: React.FC = () => {
             win.document.write('<script src="https://cdn.tailwindcss.com"></script>');
             win.document.write('<style>@media print { .no-print { display: none; } body { -webkit-print-color-adjust: exact; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid black; } }</style>');
             win.document.write('</head><body class="p-8 bg-white">');
-            win.document.write(printContent.innerHTML);
+            
+            // Injeção de lógica visual para PARCIAL no PDF
+            let content = printContent.innerHTML;
+            if (order.isPartial) {
+                // Adiciona (PARCIAL) ao título se for parcial
+                content = content.replace('Pedido #', 'Pedido (ENTREGA PARCIAL) #');
+            }
+            win.document.write(content);
+            
             win.document.write('</body></html>');
             win.document.close();
             setTimeout(() => {
@@ -891,6 +900,8 @@ const AdminOrderList: React.FC = () => {
                   <td className="p-4 font-bold text-gray-800">
                       #{order.displayId}
                       {order.romaneio && <div className="text-[10px] text-gray-500 font-normal mt-1">Romaneio: {order.romaneio}</div>}
+                      {/* INDICADOR VISUAL PARCIAL NA TABELA */}
+                      {order.isPartial && <div className="inline-block bg-purple-100 text-purple-800 text-[10px] font-bold px-1.5 rounded mt-1 border border-purple-200">PARCIAL</div>}
                   </td>
                   <td className="p-4 text-sm text-gray-600">
                     {new Date(order.createdAt).toLocaleDateString('pt-BR')}
@@ -950,7 +961,11 @@ const AdminOrderList: React.FC = () => {
                       <div className="border-2 border-black p-8 font-sans max-w-3xl mx-auto">
                         <div className="flex justify-between border-b-2 border-black pb-4 mb-6">
                             <div>
-                                <h1 className="text-4xl font-extrabold uppercase tracking-wider">Pedido #{order.displayId}</h1>
+                                {/* INDICADOR PARCIAL NA IMPRESSÃO */}
+                                <h1 className="text-4xl font-extrabold uppercase tracking-wider">
+                                    Pedido #{order.displayId} 
+                                    {order.isPartial && <span className="text-xl ml-2 bg-gray-200 px-2 rounded">(PARCIAL)</span>}
+                                </h1>
                                 <p className="text-sm mt-1">Emissão: {new Date().toLocaleDateString()}</p>
                             </div>
                             <div className="text-right">
@@ -981,7 +996,7 @@ const AdminOrderList: React.FC = () => {
                                 {order.romaneio && (
                                     <div className="col-span-2 mt-2 pt-2 border-t border-gray-300">
                                         <p className="text-xs uppercase text-gray-500 font-bold">Romaneio</p>
-                                        <p className="font-mono text-lg">{order.romaneio}</p>
+                                        <p className="font-mono text-lg">{order.romaneio} {order.isPartial && '(ENTREGA PARCIAL)'}</p>
                                     </div>
                                 )}
                             </div>
