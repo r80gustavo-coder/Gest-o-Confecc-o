@@ -137,6 +137,23 @@ const AdminOrderList: React.FC = () => {
       setPickingItems(newItems);
   };
 
+  // NOVO: Função para alterar a quantidade PEDIDA (apenas para itens novos)
+  const handleOrderQtyChange = (itemIdx: number, size: string, val: string) => {
+      const num = parseInt(val);
+      const newItems = [...pickingItems];
+      if (!newItems[itemIdx].sizes) newItems[itemIdx].sizes = {};
+
+      if (!isNaN(num) && num >= 0) {
+          newItems[itemIdx].sizes[size] = num;
+          // Opcional: Se quiser que ao digitar o pedido já preencha a separação automaticamente, descomente abaixo:
+          // if (!newItems[itemIdx].picked) newItems[itemIdx].picked = {};
+          // newItems[itemIdx].picked![size] = num;
+      } else if (val === '') {
+          delete newItems[itemIdx].sizes[size];
+      }
+      setPickingItems(newItems);
+  };
+
   const handleAddItem = () => {
       if (!addRef || !addColor) return;
       
@@ -654,7 +671,7 @@ const AdminOrderList: React.FC = () => {
         </div>
       </div>
 
-      {/* SEPARATION / PICKING MODAL (Conteúdo Mantido) */}
+      {/* SEPARATION / PICKING MODAL */}
       {pickingOrder && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4 animate-fade-in">
               <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -722,11 +739,17 @@ const AdminOrderList: React.FC = () => {
                                     const product = products.find(p => p.reference === item.reference && p.color === item.color);
                                     const isLocked = product?.enforceStock;
                                     
+                                    // Verifica se o item é NOVO (adicionado nesta sessão) ou já existia no pedido
+                                    const isNewItem = !pickingOrder.items.some(
+                                        original => original.reference === item.reference && original.color === item.color
+                                    );
+                                    
                                     return (
                                     <tr key={idx}>
                                         <td className="p-3 align-top">
                                             <p className="font-bold text-gray-800">{item.reference}</p>
                                             <p className="text-xs uppercase text-gray-500">{item.color}</p>
+                                            {isNewItem && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded ml-1 font-bold">NOVO</span>}
                                         </td>
                                         <td className="p-3 align-top">
                                             {isLocked ? (
@@ -734,7 +757,7 @@ const AdminOrderList: React.FC = () => {
                                                     <Lock className="w-4 h-4 mr-1 flex-shrink-0" />
                                                     <div>
                                                         <span className="font-bold block">Estoque Travado</span>
-                                                        <span>Já baixado no pedido.</span>
+                                                        <span>{isNewItem ? 'Verifique a disp. abaixo' : 'Já baixado no pedido.'}</span>
                                                     </div>
                                                 </div>
                                             ) : (
@@ -754,14 +777,32 @@ const AdminOrderList: React.FC = () => {
                                                     const picked = item.picked?.[size] || 0;
                                                     const isComplete = picked >= qty && qty > 0;
                                                     
+                                                    // Estoque Atual disponível (importante para item novo)
+                                                    const stockAvailable = product?.stock?.[size] || 0;
+                                                    
                                                     return (
-                                                        <div key={size} className="flex flex-col items-center border rounded p-2 bg-gray-50">
+                                                        <div key={size} className={`flex flex-col items-center border rounded p-2 ${isNewItem ? 'bg-blue-50 border-blue-100' : 'bg-gray-50'}`}>
                                                             <span className="text-xs font-bold text-gray-500 mb-1">{size}</span>
-                                                            <div className="flex items-center gap-1">
+                                                            
+                                                            <div className="flex items-center gap-1 mb-1">
                                                                 <span className="text-xs text-gray-400 mr-1">Ped:</span>
-                                                                <span className="font-bold text-gray-800 text-sm">{qty}</span>
+                                                                {isNewItem ? (
+                                                                    // INPUT para editar Pedido se for item NOVO
+                                                                    <input 
+                                                                        type="number"
+                                                                        min="0"
+                                                                        className="w-12 text-center border-b border-blue-300 bg-transparent font-bold outline-none focus:bg-white text-sm"
+                                                                        value={item.sizes[size] || ''}
+                                                                        placeholder="0"
+                                                                        onChange={(e) => handleOrderQtyChange(idx, size, e.target.value)}
+                                                                    />
+                                                                ) : (
+                                                                    // TEXTO fixo se for item existente
+                                                                    <span className="font-bold text-gray-800 text-sm">{qty}</span>
+                                                                )}
                                                             </div>
-                                                            <div className="flex items-center gap-1 mt-1">
+                                                            
+                                                            <div className="flex items-center gap-1">
                                                                 <span className="text-xs text-blue-600 mr-1 font-bold">Sep:</span>
                                                                 <input 
                                                                     type="number" 
@@ -772,6 +813,13 @@ const AdminOrderList: React.FC = () => {
                                                                     onChange={(e) => handlePickingChange(idx, size, e.target.value)}
                                                                 />
                                                             </div>
+
+                                                            {/* Mostrar Estoque Disponível para Itens Novos com Estoque Travado */}
+                                                            {isNewItem && isLocked && (
+                                                                <div className={`text-[10px] mt-1 font-bold ${qty > stockAvailable ? 'text-red-600' : 'text-green-600'}`}>
+                                                                    Disp: {stockAvailable}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )
                                                 })}
