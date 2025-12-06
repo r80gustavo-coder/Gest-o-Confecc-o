@@ -117,21 +117,27 @@ const AdminOrderList: React.FC = () => {
       const newRomaneio = prompt("Informe o número do Romaneio:", order.romaneio || "");
       if (newRomaneio !== null) {
           try {
-              // Atualiza UI otimista
+              // Salva no banco (validação de duplicidade ocorre lá)
+              await updateOrderRomaneio(order.id, newRomaneio);
+              
+              // Se sucesso, atualiza localmente
               const updatedOrders = orders.map(o => o.id === order.id ? { ...o, romaneio: newRomaneio } : o);
               setOrders(updatedOrders);
-              
-              // Salva no banco
-              await updateOrderRomaneio(order.id, newRomaneio);
-          } catch (e) {
-              alert("Erro ao salvar Romaneio. Tente novamente.");
-              fetchData(true); // Reverte mudanças se falhar
+          } catch (e: any) {
+              alert("Erro ao salvar Romaneio: " + (e.message || "Tente novamente."));
+              fetchData(true); // Garante sincronia
           }
       }
   };
 
   // --- SEPARATION LOGIC ---
   const openPickingModal = (order: Order) => {
+      // Bloqueia edição se tiver romaneio
+      if (order.romaneio) {
+          alert("Este pedido já possui Romaneio e está finalizado. Não é possível alterar itens ou estoque.");
+          return;
+      }
+
       // Deep clone items to avoid mutating state directly
       const itemsCopy = order.items.map(item => ({
           ...item,
@@ -578,13 +584,19 @@ const AdminOrderList: React.FC = () => {
                         <Truck className="w-5 h-5" />
                     </button>
 
-                    <button
-                        onClick={() => openPickingModal(order)}
-                        className="text-orange-500 hover:text-orange-700 hover:bg-orange-50 p-2 rounded transition"
-                        title="Separação de Pedido / Baixa Estoque"
-                    >
-                        <PackageOpen className="w-5 h-5" />
-                    </button>
+                    {order.romaneio ? (
+                        <div title="Pedido Finalizado (Com Romaneio)" className="text-gray-300 p-2 cursor-not-allowed">
+                            <Lock className="w-5 h-5" />
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => openPickingModal(order)}
+                            className="text-orange-500 hover:text-orange-700 hover:bg-orange-50 p-2 rounded transition"
+                            title="Separação de Pedido / Baixa Estoque"
+                        >
+                            <PackageOpen className="w-5 h-5" />
+                        </button>
+                    )}
 
                     <button 
                       onClick={() => handlePrintIndividual(order)}

@@ -140,6 +140,11 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
     
     if (fetchError) throw fetchError;
 
+    // VALIDAÇÃO DE TRAVA: Se tem Romaneio, não pode editar itens.
+    if (currentOrder.romaneio) {
+        throw new Error("Este pedido já possui Romaneio (Finalizado). Não é possível alterar itens ou estoque.");
+    }
+
     // 2. Recalcula os totais com base nos novos itens
     let newTotalPieces = 0;
     let newSubtotalValue = 0;
@@ -449,7 +454,27 @@ export const getOrders = async (): Promise<Order[]> => {
   }) as Order[] || [];
 };
 
+// --- VALIDATION HELPER ---
+const checkRomaneioExists = async (romaneio: string, excludeOrderId?: string): Promise<boolean> => {
+    if (!romaneio) return false;
+    let query = supabase.from('orders').select('id').eq('romaneio', romaneio);
+    if (excludeOrderId) {
+        query = query.neq('id', excludeOrderId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return data && data.length > 0;
+};
+
 export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order | null> => {
+  // 0. Validação de Duplicidade de Romaneio
+  if (order.romaneio) {
+      const exists = await checkRomaneioExists(order.romaneio);
+      if (exists) {
+          throw new Error(`O Romaneio nº ${order.romaneio} já existe em outro pedido. Verifique o número.`);
+      }
+  }
+
   // 1. Sequencial do ID
   let newSeq = 1000;
   try {
@@ -518,6 +543,12 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
 
 // NOVO: Atualiza apenas o Romaneio
 export const updateOrderRomaneio = async (id: string, romaneio: string): Promise<void> => {
+  // Validação de Duplicidade
+  const exists = await checkRomaneioExists(romaneio, id);
+  if (exists) {
+      throw new Error(`O Romaneio nº ${romaneio} já existe em outro pedido.`);
+  }
+
   const { error } = await supabase.from('orders').update({ romaneio }).eq('id', id);
   if (error) throw error;
 };
