@@ -1,4 +1,4 @@
-
+// ... existing imports
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef, SIZE_GRIDS, User, Role } from '../types';
 import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers } from '../services/storageService';
@@ -442,7 +442,7 @@ const AdminOrderList: React.FC = () => {
             <tfoot>
                <tr class="bg-gray-100">
                  <td colspan="2" class="left font-bold uppercase p-2">Totais por Tamanho</td>
-                 ${ALL_SIZES.map(s => `<td>${sizeTotals[s] > 0 ? sizeTotals[s] : ''}</td>`).join('')}
+                 ${ALL_SIZES.map(s => `<td>${(sizeTotals[s] as number) > 0 ? sizeTotals[s] : ''}</td>`).join('')}
                  <td class="font-bold text-xl">${totalPieces}</td>
                </tr>
             </tfoot>
@@ -749,12 +749,20 @@ const AdminOrderList: React.FC = () => {
                             <tbody>
                                 {order.items.map((item, idx) => {
                                     // CÁLCULO DINÂMICO PARA O PDF
-                                    // Recalcula o total da linha baseado apenas no que será impresso
+                                    // Se tem Romaneio E tem picking salvo, usa APENAS o que foi separado.
+                                    const hasPickingData = item.picked && Object.values(item.picked).some(v => v > 0);
+                                    const useStrictPicking = !!order.romaneio && hasPickingData;
+
                                     let displayRowTotal = 0;
                                     const cells = ALL_SIZES.map(s => {
-                                        // Prioridade: Separado > Pedido
-                                        const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-                                        const numVal = typeof val === 'number' ? val : 0;
+                                        let numVal = 0;
+                                        if (useStrictPicking) {
+                                            numVal = item.picked ? (item.picked[s] || 0) : 0;
+                                        } else {
+                                            const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
+                                            numVal = typeof val === 'number' ? val : 0;
+                                        }
+                                        
                                         displayRowTotal += numVal;
                                         return numVal;
                                     });
@@ -932,12 +940,12 @@ const AdminOrderList: React.FC = () => {
                                         <td className="p-3">
                                             <div className="flex flex-wrap gap-4 justify-center">
                                                 {SIZE_GRIDS[item.gridType].map((size) => {
-                                                    const qty = item.sizes[size] || 0; // Quantidade PEDIDA
-                                                    const picked = item.picked?.[size] || 0;
+                                                    const qty = (item.sizes[size] as number) || 0; // Quantidade PEDIDA
+                                                    const picked = (item.picked?.[size] as number) || 0;
                                                     const isComplete = picked >= qty && qty > 0;
                                                     
                                                     // Estoque Atual disponível (importante para item novo ou edição)
-                                                    const stockAvailable = product?.stock?.[size] || 0;
+                                                    const stockAvailable = (product?.stock?.[size] as number) || 0;
                                                     
                                                     return (
                                                         <div key={size} className={`flex flex-col items-center border rounded p-2 ${isNewItem || isEditing ? 'bg-blue-50 border-blue-100' : 'bg-gray-50'}`}>

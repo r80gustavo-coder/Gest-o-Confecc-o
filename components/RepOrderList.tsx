@@ -42,10 +42,25 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
 
     const itemsHtml = order.items.map(item => {
         // CÁLCULO DINÂMICO DO TOTAL DA LINHA
+        // Lógica Atualizada: Se tem Romaneio (Finalizado) E houve separação, usa estritamente o separado.
+        // Se não tem romaneio, mantém lógica híbrida (Separado > Pedido).
+        
+        const hasPickingData = item.picked && Object.values(item.picked).some(v => v > 0);
+        const useStrictPicking = !!order.romaneio && hasPickingData;
+
         let rowTotal = 0;
         const cellsHtml = ALL_SIZES.map(s => {
-            const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-            const numVal = typeof val === 'number' ? val : 0;
+            let numVal = 0;
+            
+            if (useStrictPicking) {
+                // Se finalizado, usa apenas o separado (mesmo que seja 0, se o item existe na lista)
+                numVal = item.picked ? (item.picked[s] || 0) : 0;
+            } else {
+                // Se aberto/processando, usa separado se houver, senão usa o pedido
+                const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
+                numVal = typeof val === 'number' ? val : 0;
+            }
+            
             rowTotal += numVal;
             return `<td class="text-center">${numVal > 0 ? numVal : '-'}</td>`;
         }).join('');
@@ -226,10 +241,10 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                 const isFullyPicked = totalSeparado >= totalPedido && totalPedido > 0;
                 
                 return (
-                    <div key={order.id} className={`bg-white p-4 rounded-lg shadow border-l-4 ${isFullyPicked ? 'border-green-500' : 'border-blue-400'} flex flex-col md:flex-row justify-between items-center transition-all`}>
+                    <div key={order.id} className={`bg-white p-4 rounded-lg shadow border-l-4 ${order.romaneio ? 'border-green-600' : isFullyPicked ? 'border-green-400' : 'border-blue-400'} flex flex-col md:flex-row justify-between items-center transition-all`}>
                         <div className="mb-2 md:mb-0">
                             <div className="flex items-center gap-2">
-                                <span className={`font-bold text-lg ${isFullyPicked ? 'text-green-800' : 'text-blue-900'}`}>Pedido #{order.displayId}</span>
+                                <span className={`font-bold text-lg ${order.romaneio ? 'text-green-900' : isFullyPicked ? 'text-green-700' : 'text-blue-900'}`}>Pedido #{order.displayId}</span>
                                 <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
                             </div>
                             <div className="text-gray-700 font-medium">{order.clientName}</div>
@@ -252,11 +267,15 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                         
                         <div className="flex items-center gap-2">
                             {/* Lógica de Ícones: 
-                                1. Impresso = CheckCircle (Verde) - Status administrativo
-                                2. Totalmente Separado = CheckCheck (Verde Escuro) - Status Físico
+                                1. Com Romaneio = CheckCircle (Verde Escuro) - "Finalizado"
+                                2. Impresso = CheckCircle (Verde) - "Processado" (Se não tiver romaneio)
                                 3. Aberto = Clock (Amarelo) 
                             */}
-                            {order.status === 'printed' ? (
+                            {order.romaneio ? (
+                                <div className="flex items-center text-green-800 bg-green-200 px-3 py-1 rounded-full text-sm font-bold mr-2 border border-green-300">
+                                    <CheckCircle className="w-4 h-4 mr-2" /> Finalizado
+                                </div>
+                            ) : order.status === 'printed' ? (
                                 <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full text-sm font-bold mr-2">
                                     <CheckCircle className="w-4 h-4 mr-2" /> Processado
                                 </div>
@@ -344,8 +363,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 let modalSubtotal = 0;
 
                                 const rows = viewOrder.items.map((item, idx) => {
-                                     // CÁLCULO DINÂMICO DO TOTAL DA LINHA
-                                     // Prioriza Separado > Pedido (mesma lógica do Print)
+                                     // Lógica de Visualização do Modal permanece híbrida para conferência (Separado/Pedido)
                                      let rowTotal = 0;
                                      ALL_SIZES.forEach(s => {
                                          const picked = item.picked && item.picked[s] !== undefined ? item.picked[s] : undefined;
