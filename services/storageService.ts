@@ -260,17 +260,12 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
                     delta = qNewPicked - qOldPicked;
                 } else {
                     // LÓGICA ESTOQUE TRAVADO:
-                    // Se qOldPicked > 0, significa que já houve uma separação salva antes. 
-                    // O "referencial de consumo" anterior era qOldPicked.
-                    // Se qOldPicked == 0, o "referencial de consumo" era o pedido original (qOldOrdered).
-                    const prevConsumption = qOldPicked > 0 ? qOldPicked : qOldOrdered;
-                    
-                    // O novo consumo será o qNewPicked. 
-                    // Se qNewPicked for 0, voltamos ao consumo baseado no pedido (qNewOrdered).
-                    // Isso permite que se eu aumente o PEDIDO de um item novo (qNewOrdered), o estoque baixe.
-                    const newConsumption = qNewPicked > 0 ? qNewPicked : qNewOrdered;
-                    
-                    delta = newConsumption - prevConsumption;
+                    // A reserva de estoque para itens travados é baseada no PEDIDO (qOrdered), não na separação.
+                    // Isso garante que se o representante pediu 10, 10 estão reservados.
+                    // Se o admin alterar o pedido para 12, baixa mais 2.
+                    // Se alterar para 8, devolve 2.
+                    // Se deletar o item (qNewOrdered = 0), devolve 10.
+                    delta = qNewOrdered - qOldOrdered;
                 }
 
                 if (delta !== 0) {

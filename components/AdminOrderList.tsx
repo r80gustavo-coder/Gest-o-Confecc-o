@@ -293,21 +293,20 @@ const AdminOrderList: React.FC = () => {
               ]);
 
               for (const size of allSizes) {
-                  const qNewPicked = (item.picked?.[size] as number) || 0;
                   const qNewOrdered = (item.sizes?.[size] as number) || 0; 
-                  
                   const qOldOrdered = originalItemSnapshot?.sizes?.[size] || 0;
-                  const qOldPicked = originalItemSnapshot?.picked?.[size] || 0;
 
-                  const prevConsumption = qOldPicked > 0 ? qOldPicked : qOldOrdered;
-                  const newConsumption = qNewPicked > 0 ? qNewPicked : qNewOrdered;
-                  
-                  const stockNeeded = newConsumption - prevConsumption;
+                  // LÓGICA DE VALIDAÇÃO PARA ITENS TRAVADOS:
+                  // Se a quantidade PEDIDA (Ped) aumentou, precisamos verificar se há estoque para o aumento.
+                  // Se diminuiu, não há problema (vai devolver estoque).
+                  // A quantidade "Sep" (Picked) não interfere na validação de estoque para itens travados, 
+                  // pois a reserva é baseada no pedido.
+                  const stockNeeded = qNewOrdered - qOldOrdered;
 
                   if (stockNeeded > 0) {
                       const currentStock = (product.stock[size] as number) || 0;
                       if (stockNeeded > currentStock) {
-                          alert(`BLOQUEADO: Estoque insuficiente para ${item.reference} - ${item.color} (Tam: ${size}).\n\nVocê precisa de mais ${stockNeeded} peça(s), mas só existem ${currentStock} disponíveis.`);
+                          alert(`BLOQUEADO: Estoque insuficiente para ${item.reference} - ${item.color} (Tam: ${size}).\n\nVocê está aumentando o pedido em ${stockNeeded} peça(s), mas só existem ${currentStock} disponíveis.`);
                           return false;
                       }
                   }
@@ -1528,14 +1527,14 @@ const AdminOrderList: React.FC = () => {
                     <tr>
                         <td colSpan={2} className="border p-3 text-right">TOTAL:</td>
                         {ALL_SIZES.map(s => {
-                            const colTotal = aggregatedItems.reduce((acc: number, i: OrderItem) => {
+                            const colTotal = aggregatedItems.reduce<number>((acc, i) => {
                                 const qty = i.sizes[s];
                                 return acc + (typeof qty === 'number' ? qty : 0);
                             }, 0);
                             return <td key={s} className="border p-3 text-center">{colTotal || ''}</td>
                         })}
                         <td className="border p-3 text-right text-xl">
-                            {aggregatedItems.reduce((acc: number, i: OrderItem) => acc + (i.totalQty || 0), 0)}
+                            {aggregatedItems.reduce<number>((acc, i) => acc + (i.totalQty || 0), 0)}
                         </td>
                     </tr>
                 </tfoot>
