@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef, SIZE_GRIDS } from '../types';
 import { getOrders, updateOrderStatus, saveOrderPicking, getProducts } from '../services/storageService';
 import { supabase } from '../services/supabaseClient'; // Importação do Supabase para Realtime
-import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search } from 'lucide-react';
+import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check } from 'lucide-react';
 
 const ALL_SIZES = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
@@ -24,6 +24,9 @@ const AdminOrderList: React.FC = () => {
   const [pickingOrder, setPickingOrder] = useState<Order | null>(null);
   const [pickingItems, setPickingItems] = useState<OrderItem[]>([]);
   const [savingPicking, setSavingPicking] = useState(false);
+  
+  // NOVO: Estado para controlar qual item está sendo editado no modal de separação
+  const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   // Add Item States inside Modal
   const [addRef, setAddRef] = useState('');
@@ -119,6 +122,7 @@ const AdminOrderList: React.FC = () => {
       }));
       setPickingOrder(order);
       setPickingItems(itemsCopy);
+      setEditingItemIdx(null); // Reseta edição
       setAddRef('');
       setAddColor('');
   };
@@ -137,7 +141,7 @@ const AdminOrderList: React.FC = () => {
       setPickingItems(newItems);
   };
 
-  // NOVO: Função para alterar a quantidade PEDIDA (apenas para itens novos)
+  // NOVO: Função para alterar a quantidade PEDIDA (apenas para itens novos ou em edição)
   const handleOrderQtyChange = (itemIdx: number, size: string, val: string) => {
       const num = parseInt(val);
       const newItems = [...pickingItems];
@@ -145,9 +149,6 @@ const AdminOrderList: React.FC = () => {
 
       if (!isNaN(num) && num >= 0) {
           newItems[itemIdx].sizes[size] = num;
-          // Opcional: Se quiser que ao digitar o pedido já preencha a separação automaticamente, descomente abaixo:
-          // if (!newItems[itemIdx].picked) newItems[itemIdx].picked = {};
-          // newItems[itemIdx].picked![size] = num;
       } else if (val === '') {
           delete newItems[itemIdx].sizes[size];
       }
@@ -187,11 +188,16 @@ const AdminOrderList: React.FC = () => {
           const newItems = [...pickingItems];
           newItems.splice(index, 1);
           setPickingItems(newItems);
+          if (editingItemIdx === index) setEditingItemIdx(null);
       }
   };
 
   const savePicking = async () => {
       if (!pickingOrder) return;
+      if (editingItemIdx !== null) {
+          alert("Por favor, confirme ou cancele a edição do item (clique no ✔) antes de salvar o pedido.");
+          return;
+      }
       setSavingPicking(true);
 
       // --- VALIDAÇÃO DE ESTOQUE TRAVADO ---
@@ -245,6 +251,7 @@ const AdminOrderList: React.FC = () => {
           setOrders(updatedOrders);
           
           setPickingOrder(null);
+          setEditingItemIdx(null);
           
           // Atualiza os produtos em background
           getProducts().then(setProducts);
@@ -747,17 +754,21 @@ const AdminOrderList: React.FC = () => {
                                     const product = products.find(p => p.reference === item.reference && p.color === item.color);
                                     const isLocked = product?.enforceStock;
                                     
-                                    // Verifica se o item é NOVO (adicionado nesta sessão) ou já existia no pedido
+                                    // Verifica se o item é NOVO (adicionado nesta sessão)
                                     const isNewItem = !pickingOrder.items.some(
                                         original => original.reference === item.reference && original.color === item.color
                                     );
                                     
+                                    // Verifica se está sendo editado
+                                    const isEditing = editingItemIdx === idx;
+                                    
                                     return (
-                                    <tr key={idx}>
+                                    <tr key={idx} className={isEditing ? 'bg-orange-50' : ''}>
                                         <td className="p-3 align-top">
                                             <p className="font-bold text-gray-800">{item.reference}</p>
                                             <p className="text-xs uppercase text-gray-500">{item.color}</p>
                                             {isNewItem && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded ml-1 font-bold">NOVO</span>}
+                                            {isEditing && <span className="text-[10px] bg-orange-200 text-orange-800 px-1 rounded ml-1 font-bold">EDITANDO</span>}
                                         </td>
                                         <td className="p-3 align-top">
                                             {isLocked ? (
@@ -765,7 +776,7 @@ const AdminOrderList: React.FC = () => {
                                                     <Lock className="w-4 h-4 mr-1 flex-shrink-0" />
                                                     <div>
                                                         <span className="font-bold block">Estoque Travado</span>
-                                                        <span>{isNewItem ? 'Verifique a disp. abaixo' : 'Já baixado no pedido.'}</span>
+                                                        <span>{isNewItem || isEditing ? 'Verifique a disp. abaixo' : 'Já baixado no pedido.'}</span>
                                                     </div>
                                                 </div>
                                             ) : (
@@ -785,17 +796,17 @@ const AdminOrderList: React.FC = () => {
                                                     const picked = item.picked?.[size] || 0;
                                                     const isComplete = picked >= qty && qty > 0;
                                                     
-                                                    // Estoque Atual disponível (importante para item novo)
+                                                    // Estoque Atual disponível (importante para item novo ou edição)
                                                     const stockAvailable = product?.stock?.[size] || 0;
                                                     
                                                     return (
-                                                        <div key={size} className={`flex flex-col items-center border rounded p-2 ${isNewItem ? 'bg-blue-50 border-blue-100' : 'bg-gray-50'}`}>
+                                                        <div key={size} className={`flex flex-col items-center border rounded p-2 ${isNewItem || isEditing ? 'bg-blue-50 border-blue-100' : 'bg-gray-50'}`}>
                                                             <span className="text-xs font-bold text-gray-500 mb-1">{size}</span>
                                                             
                                                             <div className="flex items-center gap-1 mb-1">
                                                                 <span className="text-xs text-gray-400 mr-1">Ped:</span>
-                                                                {isNewItem ? (
-                                                                    // INPUT para editar Pedido se for item NOVO
+                                                                {(isNewItem || isEditing) ? (
+                                                                    // INPUT para editar Pedido se for item NOVO ou em EDIÇÃO
                                                                     <input 
                                                                         type="number"
                                                                         min="0"
@@ -822,8 +833,8 @@ const AdminOrderList: React.FC = () => {
                                                                 />
                                                             </div>
 
-                                                            {/* Mostrar Estoque Disponível para Itens Novos com Estoque Travado */}
-                                                            {isNewItem && isLocked && (
+                                                            {/* Mostrar Estoque Disponível para Itens Novos ou Editados com Estoque Travado */}
+                                                            {(isNewItem || isEditing) && isLocked && (
                                                                 <div className={`text-[10px] mt-1 font-bold ${qty > stockAvailable ? 'text-red-600' : 'text-green-600'}`}>
                                                                     Disp: {stockAvailable}
                                                                 </div>
@@ -834,13 +845,33 @@ const AdminOrderList: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="p-3 text-center align-middle">
-                                            <button 
-                                                onClick={() => handleRemoveItem(idx)}
-                                                className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded"
-                                                title="Remover Item"
-                                            >
-                                                <Trash className="w-5 h-5" />
-                                            </button>
+                                            <div className="flex flex-col gap-2 items-center">
+                                                {isEditing ? (
+                                                    <button 
+                                                        onClick={() => setEditingItemIdx(null)}
+                                                        className="text-green-600 hover:text-green-800 p-2 hover:bg-green-50 rounded bg-white shadow-sm"
+                                                        title="Salvar Edição"
+                                                    >
+                                                        <Check className="w-5 h-5" />
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => setEditingItemIdx(idx)}
+                                                        className="text-blue-500 hover:text-blue-700 p-2 hover:bg-blue-50 rounded"
+                                                        title="Editar Quantidade do Pedido"
+                                                    >
+                                                        <Edit2 className="w-5 h-5" />
+                                                    </button>
+                                                )}
+
+                                                <button 
+                                                    onClick={() => handleRemoveItem(idx)}
+                                                    className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded"
+                                                    title="Remover Item"
+                                                >
+                                                    <Trash className="w-5 h-5" />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 )})}
