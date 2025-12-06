@@ -42,30 +42,30 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
 
     const itemsHtml = order.items.map(item => {
         // CÁLCULO DINÂMICO DO TOTAL DA LINHA
-        // Lógica Atualizada: Se tem Romaneio (Finalizado), usa estritamente o separado.
-        // Se não tem romaneio, mantém lógica híbrida (Separado > Pedido).
+        // CORREÇÃO: Se tem Romaneio ou é Parcial, usamos 'sizes' pois é o pedido consolidado.
         
-        const useStrictPicking = !!order.romaneio;
+        const isFinalized = !!order.romaneio || !!order.isPartial;
 
         let rowTotal = 0;
         const cellsHtml = ALL_SIZES.map(s => {
             let numVal = 0;
             
-            if (useStrictPicking) {
-                // Se finalizado, usa apenas o separado. Se não houver dados, é 0.
-                numVal = item.picked ? (item.picked[s] || 0) : 0;
-            } else {
-                // Se aberto/processando, usa separado se houver, senão usa o pedido
-                const val = item.picked && item.picked[s] !== undefined ? item.picked[s] : item.sizes[s];
-                numVal = typeof val === 'number' ? val : 0;
-            }
+            // Lógica Unificada com Admin:
+            // O campo 'sizes' contém o que foi efetivamente faturado no pedido (seja parcial ou completo).
+            // Ignoramos 'picked' na impressão final, pois 'picked' é controle de processo de separação.
+            numVal = (item.sizes && item.sizes[s]) || 0;
             
             rowTotal += numVal;
             return `<td class="text-center">${numVal > 0 ? numVal : '-'}</td>`;
         }).join('');
 
         // SE O PEDIDO ESTÁ FINALIZADO E A QUANTIDADE DESTA LINHA É 0, NÃO EXIBE NO PDF
-        if (useStrictPicking && rowTotal === 0) {
+        if (isFinalized && rowTotal === 0) {
+            return '';
+        }
+
+        // Se a linha tiver total 0 mesmo não sendo finalizado (ex: item deletado logicamente), esconde
+        if (rowTotal === 0) {
             return '';
         }
 
@@ -116,7 +116,10 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
         <body class="bg-white text-black p-8">
             <div class="flex justify-between border-b-2 border-black pb-4 mb-6">
                 <div>
-                    <h1 class="text-3xl font-extrabold uppercase tracking-wider">Pedido #${order.displayId}</h1>
+                    <h1 class="text-3xl font-extrabold uppercase tracking-wider">
+                        Pedido #${order.displayId}
+                        ${order.isPartial ? '<span class="text-lg bg-gray-200 px-2 rounded ml-2">(PARCIAL)</span>' : ''}
+                    </h1>
                     <p class="text-sm mt-1">Emissão: ${new Date(order.createdAt).toLocaleDateString()}</p>
                 </div>
                 <div class="text-right">
@@ -253,7 +256,10 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                     <div key={order.id} className={`bg-white p-4 rounded-lg shadow border-l-4 ${order.romaneio ? 'border-green-600' : isFullyPicked ? 'border-green-400' : 'border-blue-400'} flex flex-col md:flex-row justify-between items-center transition-all`}>
                         <div className="mb-2 md:mb-0">
                             <div className="flex items-center gap-2">
-                                <span className={`font-bold text-lg ${order.romaneio ? 'text-green-900' : isFullyPicked ? 'text-green-700' : 'text-blue-900'}`}>Pedido #{order.displayId}</span>
+                                <span className={`font-bold text-lg ${order.romaneio ? 'text-green-900' : isFullyPicked ? 'text-green-700' : 'text-blue-900'}`}>
+                                    Pedido #{order.displayId} 
+                                    {order.isPartial && <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded ml-2">PARCIAL</span>}
+                                </span>
                                 <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
                             </div>
                             <div className="text-gray-700 font-medium">{order.clientName}</div>
@@ -263,8 +269,8 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                             <div className="text-sm text-gray-500 mt-1">
                                 {order.totalPieces} peças • <span className="text-green-600 font-bold">R$ {(order.finalTotalValue || 0).toFixed(2)}</span>
                             </div>
-                             {/* Indicador de Separação */}
-                             {totalSeparado > 0 && (
+                             {/* Indicador de Separação - Só exibe se NÃO tiver romaneio e houver algo separado */}
+                             {totalSeparado > 0 && !order.romaneio && (
                                 <div className={`mt-2 text-xs inline-block px-2 py-1 rounded border font-bold ${isFullyPicked ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
                                     {isFullyPicked ? 'Separação Completa: ' : 'Separação: '}
                                     <span className="ml-1">
@@ -275,11 +281,6 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                         </div>
                         
                         <div className="flex items-center gap-2">
-                            {/* Lógica de Ícones: 
-                                1. Com Romaneio = CheckCircle (Verde Escuro) - "Finalizado"
-                                2. Impresso = CheckCircle (Verde) - "Processado" (Se não tiver romaneio)
-                                3. Aberto = Clock (Amarelo) 
-                            */}
                             {order.romaneio ? (
                                 <div className="flex items-center text-green-800 bg-green-200 px-3 py-1 rounded-full text-sm font-bold mr-2 border border-green-300">
                                     <CheckCircle className="w-4 h-4 mr-2" /> Finalizado
@@ -330,7 +331,10 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                 <div className="bg-white rounded-lg w-full max-w-2xl shadow-xl flex flex-col max-h-[90vh]">
                     <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
-                        <h3 className="font-bold text-lg text-gray-800">Detalhes do Pedido #{viewOrder.displayId}</h3>
+                        <h3 className="font-bold text-lg text-gray-800">
+                            Detalhes do Pedido #{viewOrder.displayId}
+                            {viewOrder.isPartial && <span className="text-sm bg-purple-100 text-purple-700 px-2 py-0.5 rounded ml-2 align-middle font-normal">PARCIAL</span>}
+                        </h3>
                         <button onClick={() => setViewOrder(null)}>
                             <X className="w-6 h-6 text-gray-500 hover:text-gray-700" />
                         </button>
@@ -360,7 +364,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 <tr>
                                     <th className="border p-2 text-left">Ref</th>
                                     <th className="border p-2 text-left">Cor</th>
-                                    <th className="border p-2 text-center">Grade (Separado/Pedido)</th>
+                                    <th className="border p-2 text-center">Grade</th>
                                     <th className="border p-2 text-right">Qtd</th>
                                     <th className="border p-2 text-right">Total</th>
                                 </tr>
@@ -372,30 +376,24 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 let modalSubtotal = 0;
                                 
                                 // FLAG CRÍTICA: Se tem Romaneio, o cálculo é ESTRITO (só o que foi separado/bipado)
-                                const isFinalized = !!viewOrder.romaneio;
+                                const isFinalized = !!viewOrder.romaneio || !!viewOrder.isPartial;
 
                                 const rows = viewOrder.items.map((item, idx) => {
                                      let rowTotal = 0;
                                      ALL_SIZES.forEach(s => {
                                          let numVal = 0;
                                          
-                                         if (isFinalized) {
-                                            // MODO ESTRITO (COM ROMANEIO): 
-                                            // Só conta para o total o que realmente foi separado.
-                                            numVal = item.picked ? (item.picked[s] || 0) : 0;
-                                         } else {
-                                            // MODO HÍBRIDO (SEM ROMANEIO):
-                                            // Se tem picked, usa. Se não, usa ordered (para projeção).
-                                            const picked = item.picked && item.picked[s] !== undefined ? item.picked[s] : undefined;
-                                            const ordered = item.sizes && item.sizes[s] !== undefined ? item.sizes[s] : 0;
-                                            
-                                            const val = picked !== undefined ? picked : ordered;
-                                            numVal = typeof val === 'number' ? val : 0;
-                                         }
+                                         // Correção de lógica: 
+                                         // Se é finalizado/parcial, a quantidade real está em 'sizes' (o pedido foi reescrito).
+                                         // Ignoramos 'picked' para pedidos finalizados pois 'picked' é um estado transiente de separação.
+                                         numVal = (item.sizes && item.sizes[s]) || 0;
                                          
                                          rowTotal += numVal;
                                      });
                                      
+                                     // Se for finalizado e a linha estiver zerada, não exibe
+                                     if (isFinalized && rowTotal === 0) return null;
+
                                      modalTotalPieces += rowTotal;
                                      const rowValue = rowTotal * item.unitPrice;
                                      modalSubtotal += rowValue;
@@ -405,7 +403,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                             <td className="border p-2 font-medium">{item.reference}</td>
                                             <td className="border p-2">{item.color}</td>
                                             <td className="border p-2 text-center">
-                                                {/* Visualização de Grade: Mostra Pedido vs Separado */}
+                                                {/* Visualização de Grade */}
                                                 {ALL_SIZES.map(s => {
                                                     const q = (item.sizes && item.sizes[s]) || 0;
                                                     const p = (item.picked && item.picked[s]) || 0;
@@ -415,7 +413,9 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                                     let displayStr = `${q}`;
                                                     let style = 'bg-gray-100 text-gray-600 border-gray-200';
 
-                                                    if (p > 0) {
+                                                    // Se estiver aberto e tiver separação em andamento, mostra X/Y
+                                                    // Se estiver fechado, mostra só a quantidade final (q)
+                                                    if (!isFinalized && p > 0) {
                                                         if (q === 0) {
                                                             displayStr = `${p}`;
                                                             style = 'bg-blue-100 text-blue-800 border-blue-200';
@@ -434,7 +434,6 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                                 })}
                                                 {(!item.sizes && !item.picked) && <span className="text-gray-300">-</span>}
                                             </td>
-                                            {/* Usa o total calculado dinamicamente */}
                                             <td className="border p-2 text-right font-bold">{rowTotal}</td>
                                             <td className="border p-2 text-right">R$ {rowValue.toFixed(2)}</td>
                                         </tr>
