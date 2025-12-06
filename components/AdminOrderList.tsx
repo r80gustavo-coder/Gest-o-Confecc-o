@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Order, OrderItem, ProductDef, SIZE_GRIDS, User, Role } from '../types';
-import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers } from '../services/storageService';
+import { getOrders, updateOrderStatus, saveOrderPicking, getProducts, updateOrderRomaneio, getUsers, getRepPrices } from '../services/storageService';
 import { supabase } from '../services/supabaseClient'; // Importação do Supabase para Realtime
 import { Printer, Calculator, CheckCircle, X, Loader2, PackageOpen, Save, Lock, Unlock, AlertTriangle, Bell, RefreshCw, Plus, Trash, Search, Edit2, Check, Truck, Filter, User as UserIcon } from 'lucide-react';
 
@@ -28,6 +28,8 @@ const AdminOrderList: React.FC = () => {
   const [pickingOrder, setPickingOrder] = useState<Order | null>(null);
   const [pickingItems, setPickingItems] = useState<OrderItem[]>([]);
   const [savingPicking, setSavingPicking] = useState(false);
+  // NOVO: Estado para armazenar os preços do representante do pedido atual
+  const [currentRepPriceMap, setCurrentRepPriceMap] = useState<Record<string, number>>({});
   
   // NOVO: Estado para controlar qual item está sendo editado no modal de separação
   const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
@@ -157,11 +159,27 @@ const AdminOrderList: React.FC = () => {
   };
 
   // --- SEPARATION LOGIC ---
-  const openPickingModal = (order: Order) => {
+  const openPickingModal = async (order: Order) => {
       // Bloqueia edição se tiver romaneio
       if (order.romaneio) {
           alert("Este pedido já possui Romaneio e está finalizado. Não é possível alterar itens ou estoque.");
           return;
+      }
+
+      // CARREGA PREÇOS DO REPRESENTANTE ESPECÍFICO DESTE PEDIDO
+      // Isso garante que se o admin adicionar um item, ele venha com o preço que o representante configurou
+      try {
+          const prices = await getRepPrices(order.repId);
+          const priceMap: Record<string, number> = {};
+          prices.forEach(p => {
+              if (p.reference) {
+                  priceMap[p.reference.trim().toUpperCase()] = p.price;
+              }
+          });
+          setCurrentRepPriceMap(priceMap);
+      } catch (e) {
+          console.error("Erro ao carregar tabela de preços do representante", e);
+          setCurrentRepPriceMap({});
       }
 
       // Deep clone items to avoid mutating state directly
@@ -224,6 +242,12 @@ const AdminOrderList: React.FC = () => {
           return;
       }
 
+      // LÓGICA DE PREÇO: Tenta pegar da tabela do representante carregada.
+      // Se não tiver, usa o basePrice do produto.
+      const normalizedRef = product.reference.trim().toUpperCase();
+      const repConfiguredPrice = currentRepPriceMap[normalizedRef];
+      const finalPrice = repConfiguredPrice !== undefined ? repConfiguredPrice : (product.basePrice || 0);
+
       const newItem: OrderItem = {
           reference: product.reference,
           color: product.color,
@@ -231,7 +255,7 @@ const AdminOrderList: React.FC = () => {
           sizes: {}, // Quantidade PEDIDA é 0 para item extra
           picked: {}, // Inicializa vazio
           totalQty: 0,
-          unitPrice: product.basePrice || 0, // Usa preço base como referência ou 0
+          unitPrice: finalPrice, // Usa o preço do representante ou base
           totalItemValue: 0
       };
 
