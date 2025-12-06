@@ -20,6 +20,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [romaneio, setRomaneio] = useState(''); // Novo estado para Romaneio
   
   // Descontos
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed' | ''>('');
@@ -238,6 +239,7 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             createdAt: new Date().toISOString(),
             deliveryDate,
             paymentMethod,
+            romaneio: romaneio, // Passa o romaneio para a função
             status: 'open',
             items,
             totalPieces: items.reduce((acc, i) => acc + i.totalQty, 0),
@@ -295,25 +297,37 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
             <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-1 gap-3">
+        
+        {/* Nova grid de 3 colunas para incluir o Romaneio */}
+        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Data Entrega</label>
-            <input 
-                type="date" 
-                className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
-                value={deliveryDate}
-                onChange={(e) => setDeliveryDate(e.target.value)}
-            />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Data Entrega</label>
+              <input 
+                  type="date" 
+                  className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+              />
             </div>
             <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
-            <input 
-                type="text" 
-                className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Ex: 30/60 dias"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-            />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
+              <input 
+                  type="text" 
+                  className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                  placeholder="Ex: 30/60 dias"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nº Romaneio</label>
+              <input 
+                  type="text" 
+                  className="w-full border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                  placeholder="Opcional"
+                  value={romaneio}
+                  onChange={(e) => setRomaneio(e.target.value)}
+              />
             </div>
         </div>
       </div>
@@ -397,9 +411,6 @@ const RepOrderForm: React.FC<Props> = ({ user, onOrderCreated }) => {
                         const stock = selectedProductData?.stock?.[size] || 0;
                         const hasStock = stock > 0;
                         const enforce = selectedProductData?.enforceStock;
-                        // Se enforce for true, desabilita se stock <= 0. Se enforce false, sempre habilita.
-                        // Mas na verdade, é melhor permitir digitar e validar ao submeter ou mostrar visualmente.
-                        // Vamos mostrar visualmente.
                         
                         return (
                         <div key={size} className="w-16">

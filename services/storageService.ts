@@ -289,6 +289,7 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
       ...updatedRow,
       id: updatedRow.id,
       displayId: updatedRow.display_id,
+      romaneio: updatedRow.romaneio, // Recupera o campo romaneio
       repId: updatedRow.rep_id,
       repName: updatedRow.rep_name,
       clientId: updatedRow.client_id,
@@ -427,6 +428,7 @@ export const getOrders = async (): Promise<Order[]> => {
       ...row,
       id: row.id,
       displayId: row.display_id || row.displayId,
+      romaneio: row.romaneio, // Mapeia o campo do banco
       repId: row.rep_id || row.repId,
       repName: row.rep_name || row.repName,
       clientId: row.client_id || row.clientId,
@@ -477,6 +479,7 @@ export const addOrder = async (order: Omit<Order, 'displayId'>): Promise<Order |
   const dbOrder = {
     id: orderWithSeq.id,
     display_id: orderWithSeq.displayId,
+    romaneio: orderWithSeq.romaneio || null, // Salva campo romaneio (pode ser nulo)
     rep_id: orderWithSeq.repId,
     rep_name: orderWithSeq.repName,
     client_id: orderWithSeq.clientId,

@@ -597,6 +597,13 @@ const AdminOrderList: React.FC = () => {
                                     <p className="text-xs uppercase text-gray-500 font-bold">Pagamento</p>
                                     <p>{order.paymentMethod || '-'}</p>
                                 </div>
+                                {/* Exibe Romaneio se existir */}
+                                {order.romaneio && (
+                                    <div className="col-span-2 mt-2 pt-2 border-t border-gray-300">
+                                        <p className="text-xs uppercase text-gray-500 font-bold">Romaneio</p>
+                                        <p className="font-mono text-lg">{order.romaneio}</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

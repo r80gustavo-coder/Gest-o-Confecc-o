@@ -119,6 +119,11 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                         <p class="text-xs uppercase text-gray-500 font-bold">Pagamento</p>
                         <p>${order.paymentMethod || '-'}</p>
                     </div>
+                    ${order.romaneio ? `
+                    <div class="col-span-2 pt-2 border-t border-gray-300 mt-2">
+                        <p class="text-xs uppercase text-gray-500 font-bold">Romaneio</p>
+                        <p class="font-mono text-lg font-bold">${order.romaneio}</p>
+                    </div>` : ''}
                 </div>
             </div>
 
@@ -228,6 +233,9 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
                             </div>
                             <div className="text-gray-700 font-medium">{order.clientName}</div>
+                            {order.romaneio && (
+                                <div className="text-xs text-gray-500 mt-0.5">Romaneio: <span className="font-mono font-bold text-gray-700">{order.romaneio}</span></div>
+                            )}
                             <div className="text-sm text-gray-500 mt-1">
                                 {order.totalPieces} peças • <span className="text-green-600 font-bold">R$ {(order.finalTotalValue || 0).toFixed(2)}</span>
                             </div>
@@ -313,6 +321,12 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                 <p className="text-xs text-gray-500 uppercase">Pagamento</p>
                                 <p>{viewOrder.paymentMethod || '-'}</p>
                             </div>
+                            {viewOrder.romaneio && (
+                                <div>
+                                    <p className="text-xs text-gray-500 uppercase">Romaneio</p>
+                                    <p className="font-mono font-bold">{viewOrder.romaneio}</p>
+                                </div>
+                            )}
                         </div>
 
                         <table className="w-full text-sm border-collapse border border-gray-200">
