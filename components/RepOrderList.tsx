@@ -325,71 +325,104 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                     <th className="border p-2 text-right">Total</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {viewOrder.items.map((item, idx) => (
-                                    <tr key={idx}>
-                                        <td className="border p-2 font-medium">{item.reference}</td>
-                                        <td className="border p-2">{item.color}</td>
-                                        <td className="border p-2 text-center">
-                                            {/* 
-                                                ATUALIZAÇÃO DE VISUALIZAÇÃO:
-                                                Agora itera sobre ALL_SIZES para garantir que itens que não estavam 
-                                                no pedido original (sizes={}) mas foram bipados (picked={}) apareçam.
-                                            */}
-                                            {ALL_SIZES.map(s => {
-                                                const q = (item.sizes && item.sizes[s]) || 0;
-                                                const p = (item.picked && item.picked[s]) || 0;
+                            
+                            {/* IIFE para calcular totais dinamicamente dentro do render */}
+                            {(() => {
+                                let modalTotalPieces = 0;
+                                let modalSubtotal = 0;
 
-                                                // Se não tem nem pedido nem separado, não exibe
-                                                if (q === 0 && p === 0) return null;
+                                const rows = viewOrder.items.map((item, idx) => {
+                                     // CÁLCULO DINÂMICO DO TOTAL DA LINHA
+                                     // Prioriza Separado > Pedido (mesma lógica do Print)
+                                     let rowTotal = 0;
+                                     ALL_SIZES.forEach(s => {
+                                         const picked = item.picked && item.picked[s] !== undefined ? item.picked[s] : undefined;
+                                         const ordered = item.sizes && item.sizes[s] !== undefined ? item.sizes[s] : 0;
+                                         
+                                         // Se tem picked, usa. Se não, usa ordered.
+                                         const val = picked !== undefined ? picked : ordered;
+                                         const numVal = typeof val === 'number' ? val : 0;
+                                         
+                                         rowTotal += numVal;
+                                     });
+                                     
+                                     modalTotalPieces += rowTotal;
+                                     const rowValue = rowTotal * item.unitPrice;
+                                     modalSubtotal += rowValue;
 
-                                                let displayStr = `${q}`;
-                                                let style = 'bg-gray-100 text-gray-600 border-gray-200';
+                                     return (
+                                        <tr key={idx}>
+                                            <td className="border p-2 font-medium">{item.reference}</td>
+                                            <td className="border p-2">{item.color}</td>
+                                            <td className="border p-2 text-center">
+                                                {/* Visualização de Grade: Mostra Pedido vs Separado */}
+                                                {ALL_SIZES.map(s => {
+                                                    const q = (item.sizes && item.sizes[s]) || 0;
+                                                    const p = (item.picked && item.picked[s]) || 0;
 
-                                                if (p > 0) {
-                                                    if (q === 0) {
-                                                        // Item Extra (não estava no pedido original)
-                                                        displayStr = `${p}`;
-                                                        style = 'bg-blue-100 text-blue-800 border-blue-200';
-                                                    } else {
-                                                        // Item Separado vs Pedido
-                                                        displayStr = `${p}/${q}`;
-                                                        if (p >= q) style = 'bg-green-100 text-green-800 border-green-200';
-                                                        else style = 'bg-yellow-50 text-yellow-700 border-yellow-200';
+                                                    if (q === 0 && p === 0) return null;
+
+                                                    let displayStr = `${q}`;
+                                                    let style = 'bg-gray-100 text-gray-600 border-gray-200';
+
+                                                    if (p > 0) {
+                                                        if (q === 0) {
+                                                            displayStr = `${p}`;
+                                                            style = 'bg-blue-100 text-blue-800 border-blue-200';
+                                                        } else {
+                                                            displayStr = `${p}/${q}`;
+                                                            if (p >= q) style = 'bg-green-100 text-green-800 border-green-200';
+                                                            else style = 'bg-yellow-50 text-yellow-700 border-yellow-200';
+                                                        }
                                                     }
-                                                }
 
-                                                return (
-                                                    <span key={s} className={`${style} px-1.5 py-0.5 mx-0.5 rounded text-xs border inline-block mb-1`}>
-                                                        <span className="font-bold mr-0.5">{s}:</span>{displayStr}
-                                                    </span>
-                                                )
-                                            })}
-                                            {/* Fallback visual caso item esteja completamente zerado */}
-                                            {(!item.sizes && !item.picked) && <span className="text-gray-300">-</span>}
-                                        </td>
-                                        <td className="border p-2 text-right font-bold">{item.totalQty}</td>
-                                        <td className="border p-2 text-right">R$ {(item.totalItemValue || 0).toFixed(2)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                            <tfoot className="bg-gray-50 font-bold">
-                                <tr>
-                                    <td colSpan={3} className="border p-2 text-right">Total Peças</td>
-                                    <td className="border p-2 text-right">{viewOrder.totalPieces}</td>
-                                    <td className="border p-2 text-right">-</td>
-                                </tr>
-                                {viewOrder.discountValue > 0 && (
-                                    <tr className="text-red-600">
-                                        <td colSpan={4} className="border p-2 text-right">Desconto ({viewOrder.discountType === 'percentage' ? '%' : 'R$'})</td>
-                                        <td className="border p-2 text-right">- {viewOrder.discountType === 'percentage' ? `${viewOrder.discountValue}%` : `R$ ${viewOrder.discountValue}`}</td>
-                                    </tr>
-                                )}
-                                <tr className="text-lg">
-                                    <td colSpan={4} className="border p-2 text-right uppercase">Total Final</td>
-                                    <td className="border p-2 text-right text-green-700">R$ {(viewOrder.finalTotalValue || 0).toFixed(2)}</td>
-                                </tr>
-                            </tfoot>
+                                                    return (
+                                                        <span key={s} className={`${style} px-1.5 py-0.5 mx-0.5 rounded text-xs border inline-block mb-1`}>
+                                                            <span className="font-bold mr-0.5">{s}:</span>{displayStr}
+                                                        </span>
+                                                    )
+                                                })}
+                                                {(!item.sizes && !item.picked) && <span className="text-gray-300">-</span>}
+                                            </td>
+                                            {/* Usa o total calculado dinamicamente, não o do DB */}
+                                            <td className="border p-2 text-right font-bold">{rowTotal}</td>
+                                            <td className="border p-2 text-right">R$ {rowValue.toFixed(2)}</td>
+                                        </tr>
+                                     );
+                                });
+
+                                // Footer Totals
+                                let discountAmount = 0;
+                                if (viewOrder.discountType === 'percentage') {
+                                    discountAmount = modalSubtotal * (viewOrder.discountValue / 100);
+                                } else if (viewOrder.discountType === 'fixed') {
+                                    discountAmount = viewOrder.discountValue;
+                                }
+                                const finalTotal = modalSubtotal - discountAmount;
+
+                                return (
+                                    <>
+                                        <tbody>{rows}</tbody>
+                                        <tfoot className="bg-gray-50 font-bold">
+                                            <tr>
+                                                <td colSpan={3} className="border p-2 text-right">Total Peças</td>
+                                                <td className="border p-2 text-right">{modalTotalPieces}</td>
+                                                <td className="border p-2 text-right">-</td>
+                                            </tr>
+                                            {viewOrder.discountValue > 0 && (
+                                                <tr className="text-red-600">
+                                                    <td colSpan={4} className="border p-2 text-right">Desconto ({viewOrder.discountType === 'percentage' ? '%' : 'R$'})</td>
+                                                    <td className="border p-2 text-right">- {discountAmount.toFixed(2)}</td>
+                                                </tr>
+                                            )}
+                                            <tr className="text-lg">
+                                                <td colSpan={4} className="border p-2 text-right uppercase">Total Final</td>
+                                                <td className="border p-2 text-right text-green-700">R$ {finalTotal.toFixed(2)}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </>
+                                );
+                            })()}
                         </table>
                     </div>
                     

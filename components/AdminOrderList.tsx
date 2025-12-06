@@ -205,15 +205,23 @@ const AdminOrderList: React.FC = () => {
                   i => i.reference === item.reference && i.color === item.color
               );
 
-              for (const [size, qty] of Object.entries(item.picked || {})) {
-                  const qNewPicked = (qty as number) || 0;
+              // Consolida todos os tamanhos envolvidos (seja no picked ou no sizes)
+              const allSizes = new Set([
+                  ...Object.keys(item.picked || {}),
+                  ...Object.keys(item.sizes || {})
+              ]);
+
+              for (const size of allSizes) {
+                  const qNewPicked = item.picked?.[size] || 0;
+                  const qNewOrdered = item.sizes?.[size] || 0; // Quantidade pedida atual (pode ter sido editada)
                   
                   // Valores antigos/originais
-                  const qOrdered = originalItemSnapshot?.sizes?.[size] || 0;
+                  const qOldOrdered = originalItemSnapshot?.sizes?.[size] || 0;
                   const qOldPicked = originalItemSnapshot?.picked?.[size] || 0;
 
-                  const prevConsumption = qOldPicked > 0 ? qOldPicked : qOrdered;
-                  const newConsumption = qNewPicked > 0 ? qNewPicked : qOrdered;
+                  // Lógica de Consumo (Espelho do Backend atualizado):
+                  const prevConsumption = qOldPicked > 0 ? qOldPicked : qOldOrdered;
+                  const newConsumption = qNewPicked > 0 ? qNewPicked : qNewOrdered;
                   
                   const stockNeeded = newConsumption - prevConsumption;
 

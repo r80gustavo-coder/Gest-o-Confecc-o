@@ -221,15 +221,24 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
             let stockChanged = false;
             const newStock = { ...product.stock };
             
+            // Dados Antigos (Estado anterior no DB)
             const oldPicked = oldItem?.picked || {};
+            const oldOrderedSizes = oldItem?.sizes || {};
+            
+            // Dados Novos (O que está sendo salvo agora)
             const newPicked = newItem?.picked || {};
-            const orderedSizes = newItem?.sizes || {};
+            const newOrderedSizes = newItem?.sizes || {};
 
-            const allSizes = new Set([...Object.keys(oldPicked), ...Object.keys(newPicked), ...Object.keys(orderedSizes)]);
+            const allSizes = new Set([
+                ...Object.keys(oldPicked), ...Object.keys(oldOrderedSizes),
+                ...Object.keys(newPicked), ...Object.keys(newOrderedSizes)
+            ]);
 
             allSizes.forEach(size => {
-                const qOrdered = orderedSizes[size] || 0;
+                const qOldOrdered = oldOrderedSizes[size] || 0;
                 const qOldPicked = oldPicked[size] || 0;
+                
+                const qNewOrdered = newOrderedSizes[size] || 0;
                 const qNewPicked = newPicked[size] || 0;
 
                 let delta = 0;
@@ -237,26 +246,20 @@ export const saveOrderPicking = async (orderId: string, oldItems: OrderItem[], n
                 if (!product.enforceStock) {
                     // LÓGICA ESTOQUE LIVRE:
                     // Apenas calcula a diferença do que foi "separado" agora vs antes.
-                    // Pedido original não afeta estoque, só a separação afeta.
                     delta = qNewPicked - qOldPicked;
                 } else {
                     // LÓGICA ESTOQUE TRAVADO:
-                    // O estoque já foi baixado pelo valor do pedido (qOrdered) na criação.
-                    // Precisamos ajustar o estoque baseado na diferença entre o REALMENTE separado e o que JÁ FOI contabilizado.
-                    
                     // Se qOldPicked > 0, significa que já houve uma separação salva antes. 
-                    // O "referencial de consumo" atual no banco é qOldPicked.
-                    // Se qOldPicked == 0, significa que é a primeira vez que salvamos a separação (ou cancelamos).
-                    // O "referencial de consumo" atual no banco é qOrdered.
-                    
-                    const previousConsumption = qOldPicked > 0 ? qOldPicked : qOrdered;
+                    // O "referencial de consumo" anterior era qOldPicked.
+                    // Se qOldPicked == 0, o "referencial de consumo" era o pedido original (qOldOrdered).
+                    const prevConsumption = qOldPicked > 0 ? qOldPicked : qOldOrdered;
                     
                     // O novo consumo será o qNewPicked. 
-                    // Se qNewPicked for 0, voltamos ao "estado original" de consumo que é o pedido (qOrdered),
-                    // pois se limparmos a separação, o pedido continua valendo e reservando estoque.
-                    const newConsumption = qNewPicked > 0 ? qNewPicked : qOrdered;
+                    // Se qNewPicked for 0, voltamos ao consumo baseado no pedido (qNewOrdered).
+                    // Isso permite que se eu aumente o PEDIDO de um item novo (qNewOrdered), o estoque baixe.
+                    const newConsumption = qNewPicked > 0 ? qNewPicked : qNewOrdered;
                     
-                    delta = newConsumption - previousConsumption;
+                    delta = newConsumption - prevConsumption;
                 }
 
                 if (delta !== 0) {
