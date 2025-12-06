@@ -92,6 +92,11 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
     
     const finalTotal = calculatedSubtotal - discountAmount;
 
+    // Formata o label do desconto para mostrar a porcentagem (ex: "Desconto (10%)")
+    const discountLabel = order.discountType === 'percentage' 
+        ? `Desconto (${order.discountValue}%)` 
+        : `Desconto (Fixo)`;
+
     const html = `
       <html>
         <head>
@@ -169,7 +174,7 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                     ${order.discountValue > 0 ? `
                     <tr>
                         <td colspan="${ALL_SIZES.length + 3}" class="text-right p-2">
-                            Desconto (${order.discountType === 'percentage' ? '%' : 'R$'})
+                            ${discountLabel}
                         </td>
                         <td class="text-right text-red-600 font-bold p-2">
                             - ${discountAmount.toFixed(2)}
@@ -456,7 +461,11 @@ const RepOrderList: React.FC<Props> = ({ user }) => {
                                             </tr>
                                             {viewOrder.discountValue > 0 && (
                                                 <tr className="text-red-600">
-                                                    <td colSpan={4} className="border p-2 text-right">Desconto ({viewOrder.discountType === 'percentage' ? '%' : 'R$'})</td>
+                                                    <td colSpan={4} className="border p-2 text-right">
+                                                        {viewOrder.discountType === 'percentage' 
+                                                            ? `Desconto (${viewOrder.discountValue}%)` 
+                                                            : 'Desconto (Fixo)'}
+                                                    </td>
                                                     <td className="border p-2 text-right">- {discountAmount.toFixed(2)}</td>
                                                 </tr>
                                             )}

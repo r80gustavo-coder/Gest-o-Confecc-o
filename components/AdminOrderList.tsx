@@ -831,7 +831,9 @@ const AdminOrderList: React.FC = () => {
                                 {order.discountValue > 0 && (
                                     <tr>
                                        <td colSpan={ALL_SIZES.length + 3} className="border border-black p-2 text-right">
-                                          Desconto: {order.discountType === 'percentage' ? `${order.discountValue}%` : `R$ ${order.discountValue}`}
+                                          {order.discountType === 'percentage' 
+                                              ? `Desconto (${order.discountValue}%)` 
+                                              : 'Desconto (Fixo)'}
                                        </td>
                                        <td className="border border-black p-2 text-right text-red-600 font-bold">
                                          - {order.discountType === 'percentage' ? ((calculatedSubtotal * order.discountValue)/100).toFixed(2) : order.discountValue.toFixed(2)}
